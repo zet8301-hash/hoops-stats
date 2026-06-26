@@ -127,6 +127,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
+  useEffect(() => { window.scrollTo(0, 0); }, [tab]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -157,9 +159,9 @@ export default function App() {
         <GlobalStyle />
         <header style={S.header}>
           <div style={S.headerInner}>
-            <button style={{...S.backBtn,fontSize:20,fontWeight:300,padding:"4px 8px"}} onClick={() => setSelectedPlayer(null)}>‹</button>
+            <button style={{...S.backBtn,fontSize:20,fontWeight:300,padding:"4px 8px",width:40}} onClick={() => setSelectedPlayer(null)}>‹</button>
             <span style={S.logoText}>HOOPS</span>
-            <div style={{width:60}} />
+            <div style={{width:40}} />
           </div>
         </header>
         <main style={S.main}>
@@ -190,7 +192,7 @@ export default function App() {
         </div>
       </nav>
       <main style={S.main}>
-        {tab === "home"    && <Home players={players} games={games} duels={duels} onSelectPlayer={setSelectedPlayer} />}
+        {tab === "home"    && <Home players={players} games={games} duels={duels} onSelectPlayer={setSelectedPlayer} onGoToLog={()=>setTab("log")} />}
         {tab === "players" && <Players players={players} games={games} onReload={load} onSelectPlayer={setSelectedPlayer} />}
         {tab === "record"  && <RecordGame players={players} onReload={load} />}
         {tab === "duel"    && <DuelTab players={players} duels={duels} onReload={load} onSelectPlayer={setSelectedPlayer} />}
@@ -207,6 +209,8 @@ function ProfilePage({ player, games, duels, players, onReload }: {
   const [editSig, setEditSig] = useState(false);
   const [sig, setSig] = useState(player.signature || "");
   const [savingSig, setSavingSig] = useState(false);
+
+  useEffect(() => { window.scrollTo(0, 0); }, [player.id]);
 
   const tier = getTier(player);
   const nextTier = getNextTier(player);
@@ -464,7 +468,7 @@ function ProfilePage({ player, games, duels, players, onReload }: {
 }
 
 // ── HOME ──────────────────────────────────────────────────────────────────────
-function Home({ players, games, duels, onSelectPlayer }: { players: Player[]; games: Game[]; duels: Duel[]; onSelectPlayer: (p:Player)=>void }) {
+function Home({ players, games, duels, onSelectPlayer, onGoToLog }: { players: Player[]; games: Game[]; duels: Duel[]; onSelectPlayer: (p:Player)=>void; onGoToLog: ()=>void }) {
   const sorted = [...players].sort((a,b)=>(b.win_rate||0)-(a.win_rate||0));
   const mvpSorted = [...players].sort((a,b)=>(b.mvp||0)-(a.mvp||0));
   const duelSorted = [...players].filter(p=>(p.duel_wins||0)+(p.duel_losses||0)>0).sort((a,b)=>{
@@ -627,23 +631,26 @@ function Home({ players, games, duels, onSelectPlayer }: { players: Player[]; ga
         const topWr=players.filter(p=>p.wins+p.losses>=5).sort((a,b)=>(b.win_rate??0)-(a.win_rate??0))[0];
         const bottomWr=players.filter(p=>p.wins+p.losses>=5).sort((a,b)=>(a.win_rate??0)-(b.win_rate??0))[0];
         const teamHighScore=games.length>0?Math.max(...games.flatMap(g=>[g.score_a,g.score_b])):0;
-        const rows=[
-          {label:"역대 최장 연승", name:bestWin?.p.name,   stat:`${bestWin?.n}연승`,                             color:"#F59E0B"},
-          {label:"역대 최장 연패", name:worstLoss?.p.name, stat:`${worstLoss?.n}연패`,                           color:"#475569"},
-          {label:"역대 최고 승률", name:topWr?.name,       stat:topWr?`${topWr.win_rate}%`:null,                 color:"#FF6200"},
-          {label:"역대 최저 승률", name:bottomWr?.name,    stat:bottomWr?`${bottomWr.win_rate}%`:null,           color:"#475569"},
-          {label:"최다 경기 출전", name:ironMan?.name,     stat:`${(ironMan?.wins??0)+(ironMan?.losses??0)}경기`, color:"#60A5FA"},
-          {label:"팀 최고 스코어", name:null,              stat:teamHighScore?`${teamHighScore}점`:null,          color:"#60A5FA"},
-          {label:"최대 점수 차",   name:blowout?`${blowout.score_a} - ${blowout.score_b}`:null, stat:blowoutDiff?`${blowoutDiff}점 차`:null, color:"#555"},
-        ];
+        const rows:[{label:string;name:string|null|undefined;stat:string|null;color:string;onClick?:()=>void}]=[
+          {label:"역대 최장 연승", name:bestWin?.p.name,   stat:`${bestWin?.n}연승`,                             color:"#F59E0B", onClick:bestWin?.p?()=>onSelectPlayer(bestWin.p):undefined},
+          {label:"역대 최장 연패", name:worstLoss?.p.name, stat:`${worstLoss?.n}연패`,                           color:"#475569", onClick:worstLoss?.p?()=>onSelectPlayer(worstLoss.p):undefined},
+          {label:"역대 최고 승률", name:topWr?.name,       stat:topWr?`${topWr.win_rate}%`:null,                 color:"#FF6200", onClick:topWr?()=>onSelectPlayer(topWr):undefined},
+          {label:"역대 최저 승률", name:bottomWr?.name,    stat:bottomWr?`${bottomWr.win_rate}%`:null,           color:"#475569", onClick:bottomWr?()=>onSelectPlayer(bottomWr):undefined},
+          {label:"최다 경기 출전", name:ironMan?.name,     stat:`${(ironMan?.wins??0)+(ironMan?.losses??0)}경기`, color:"#60A5FA", onClick:ironMan?()=>onSelectPlayer(ironMan):undefined},
+          {label:"팀 최고 스코어", name:null,              stat:teamHighScore?`${teamHighScore}점`:null,          color:"#60A5FA", onClick:onGoToLog},
+          {label:"최대 점수 차",   name:blowout?`${blowout.score_a} - ${blowout.score_b}`:null, stat:blowoutDiff?`${blowoutDiff}점 차`:null, color:"#555", onClick:onGoToLog},
+        ] as any;
         return (
           <div style={S.card}>
             <div style={S.cardHeader}><span style={S.cardTitle}>통산 기록</span></div>
-            {rows.filter(r=>r.name&&r.stat).map((r,i)=>(
-              <div key={i} style={{display:"flex",alignItems:"center",paddingTop:i===0?0:12,marginTop:i===0?0:12,borderTop:i===0?"none":"1px solid #1e1e1e"}}>
+            {rows.filter((r:any)=>r.stat).map((r:any,i:number)=>(
+              <div key={i} onClick={r.onClick} style={{display:"flex",alignItems:"center",paddingTop:i===0?0:12,marginTop:i===0?0:12,borderTop:i===0?"none":"1px solid #1e1e1e",cursor:r.onClick?"pointer":"default"}}>
                 <span style={{flex:1,fontSize:13,color:"#555",fontWeight:600}}>{r.label}</span>
-                <span style={{fontSize:13,fontWeight:700,color:"#888",marginRight:10}}>{r.name}</span>
-                <span style={{fontSize:18,fontWeight:900,fontFamily:"'Bebas Neue',sans-serif",color:r.color,lineHeight:1}}>{r.stat}</span>
+                {r.name&&<span style={{fontSize:13,fontWeight:700,color:"#888",marginRight:10}}>{r.name}</span>}
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:18,fontWeight:900,fontFamily:"'Bebas Neue',sans-serif",color:r.color,lineHeight:1}}>{r.stat}</span>
+                  {r.onClick&&<span style={{fontSize:12,color:"#333"}}>›</span>}
+                </div>
               </div>
             ))}
           </div>
