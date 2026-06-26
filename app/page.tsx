@@ -894,13 +894,15 @@ function RecordGame({ players, onReload }: { players: Player[]; onReload: () => 
         {/* 게스트 추가 */}
         <div style={{borderTop:"1px solid #262626",marginTop:14,paddingTop:12}}>
           <div style={S.fieldLabel}>게스트 추가</div>
-          <div style={{display:"flex",gap:6}}>
-            <input style={{...S.input,flex:1}} placeholder="게스트 이름" value={guestInput} onChange={e=>setGuestInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addGuest()}/>
-            <select style={S.select} value={guestTeam} onChange={e=>setGuestTeam(e.target.value as "A"|"B")}>
-              <option value="A">팀 A</option>
-              <option value="B">팀 B</option>
-            </select>
-            <button style={S.btnPrimary} onClick={addGuest}>추가</button>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            <div style={{display:"flex",gap:6}}>
+              <input style={{...S.input,flex:1}} placeholder="게스트 이름" value={guestInput} onChange={e=>setGuestInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addGuest()}/>
+              <select style={S.select} value={guestTeam} onChange={e=>setGuestTeam(e.target.value as "A"|"B")}>
+                <option value="A">팀 A</option>
+                <option value="B">팀 B</option>
+              </select>
+            </div>
+            <button style={{...S.btnPrimary,width:"100%"}} onClick={addGuest}>추가</button>
           </div>
         </div>
       </div>
@@ -1013,40 +1015,44 @@ function DuelTab({ players, duels, onReload, onSelectPlayer }: { players: Player
         </button>
       </div>
 
-      <div style={S.card}>
-        <div style={S.cardHeader}>
-          <span style={S.cardTitle}>1vs1 기록</span>
-          <span style={S.cardSub}>{duels.length}경기</span>
-        </div>
-        {duels.length===0&&<Empty text="1vs1 기록이 없습니다"/>}
-        {duels.slice(0,20).map(d=>{
+      {(()=>{
+        const grouped=duels.reduce((acc,d)=>{
           const dt=new Date(d.created_at);
-          const date=`${dt.getMonth()+1}/${String(dt.getDate()).padStart(2,"0")}`;
-          const aWon=d.winner===d.player_a;
-          const doDelete=async()=>{
-            if(!confirm("이 1vs1 기록을 삭제할까요?")) return;
-            await sb.del("duels",`?id=eq.${d.id}`);
-            const remaining = duels.filter(x=>x.id!==d.id);
-            for(const pid of [d.player_a, d.player_b]){
-              const p=players.find(x=>x.id===pid); if(!p) continue;
-              const myD=remaining.filter(x=>x.player_a===pid||x.player_b===pid);
-              await sb.patch("players",{duel_wins:myD.filter(x=>x.winner===pid).length,duel_losses:myD.length-myD.filter(x=>x.winner===pid).length},`?id=eq.${pid}`);
-            }
-            onReload();
-          };
-          return (
-            <div key={d.id} style={{...S.gameWrap,display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:12,color:"#555",width:30,flexShrink:0}}>{date}</span>
-              <span style={{flex:1,fontSize:14,fontWeight:aWon?700:400,color:aWon?"#fff":"#555",cursor:"pointer",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} onClick={()=>{const p=players.find(x=>x.id===d.player_a);if(p)onSelectPlayer(p);}}>{pname(d.player_a)}</span>
-              <span style={{fontSize:22,fontWeight:900,color:aWon?"#fff":"#555",fontFamily:"'Bebas Neue',sans-serif",flexShrink:0}}>{d.score_a}</span>
-              <span style={{fontSize:12,color:"#333",flexShrink:0}}>:</span>
-              <span style={{fontSize:22,fontWeight:900,color:!aWon?"#fff":"#555",fontFamily:"'Bebas Neue',sans-serif",flexShrink:0}}>{d.score_b}</span>
-              <span style={{flex:1,fontSize:14,fontWeight:!aWon?700:400,color:!aWon?"#fff":"#555",textAlign:"right",cursor:"pointer",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} onClick={()=>{const p=players.find(x=>x.id===d.player_b);if(p)onSelectPlayer(p);}}>{pname(d.player_b)}</span>
-              <button style={{...S.delIcon,flexShrink:0}} onClick={doDelete}>×</button>
-            </div>
-          );
-        })}
-      </div>
+          const key=`${dt.getFullYear()}.${String(dt.getMonth()+1).padStart(2,"0")}.${String(dt.getDate()).padStart(2,"0")}`;
+          if(!acc[key])acc[key]=[];acc[key].push(d);return acc;
+        },{} as Record<string,Duel[]>);
+        const keys=Object.keys(grouped).sort((a,b)=>b>a?1:-1);
+        if(keys.length===0) return <div style={S.card}><Empty text="1vs1 기록이 없습니다"/></div>;
+        return keys.map(date=>(
+          <div key={date} style={S.card}>
+            <div style={{fontSize:11,fontWeight:700,color:"#555",letterSpacing:1,marginBottom:10}}>{date}</div>
+            {grouped[date].map(d=>{
+              const aWon=d.winner===d.player_a;
+              const doDelete=async()=>{
+                if(!confirm("이 1vs1 기록을 삭제할까요?")) return;
+                await sb.del("duels",`?id=eq.${d.id}`);
+                const remaining=duels.filter(x=>x.id!==d.id);
+                for(const pid of [d.player_a,d.player_b]){
+                  const p=players.find(x=>x.id===pid);if(!p)continue;
+                  const myD=remaining.filter(x=>x.player_a===pid||x.player_b===pid);
+                  await sb.patch("players",{duel_wins:myD.filter(x=>x.winner===pid).length,duel_losses:myD.length-myD.filter(x=>x.winner===pid).length},`?id=eq.${pid}`);
+                }
+                onReload();
+              };
+              return (
+                <div key={d.id} style={{...S.gameWrap,display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{flex:1,fontSize:14,fontWeight:aWon?700:400,color:aWon?"#fff":"#555",cursor:"pointer",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} onClick={()=>{const p=players.find(x=>x.id===d.player_a);if(p)onSelectPlayer(p);}}>{pname(d.player_a)}</span>
+                  <span style={{fontSize:22,fontWeight:900,color:aWon?"#fff":"#555",fontFamily:"'Bebas Neue',sans-serif",flexShrink:0}}>{d.score_a}</span>
+                  <span style={{fontSize:12,color:"#333",flexShrink:0}}>:</span>
+                  <span style={{fontSize:22,fontWeight:900,color:!aWon?"#fff":"#555",fontFamily:"'Bebas Neue',sans-serif",flexShrink:0}}>{d.score_b}</span>
+                  <span style={{flex:1,fontSize:14,fontWeight:!aWon?700:400,color:!aWon?"#fff":"#555",textAlign:"right",cursor:"pointer",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} onClick={()=>{const p=players.find(x=>x.id===d.player_b);if(p)onSelectPlayer(p);}}>{pname(d.player_b)}</span>
+                  <button style={{...S.delIcon,flexShrink:0}} onClick={doDelete}>×</button>
+                </div>
+              );
+            })}
+          </div>
+        ));
+      })()}
     </div>
   );
 }
