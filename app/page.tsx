@@ -508,14 +508,21 @@ function Home({ players, games, duels, onSelectPlayer }: { players: Player[]; ga
             <span style={{...S.cardTitle,color:"#FF6200"}}>요즘 핫함</span>
             <span style={{fontSize:11,color:"#555"}}>최근 3연승</span>
           </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {hotPlayers.map(p=>{
+          <div style={{display:"flex",flexDirection:"column",gap:0}}>
+            {hotPlayers.map((p,i)=>{
               const streak=getStreak(p.id,games);
+              const tier=getTier(p);
               return (
-                <button key={p.id} style={{background:"#1e1e1e",border:"1px solid #FF6200",borderRadius:8,padding:"7px 14px",cursor:"pointer",WebkitAppearance:"none",display:"flex",alignItems:"center",gap:6}} onClick={()=>onSelectPlayer(p)}>
-                  <span style={{color:"#FF6200",fontWeight:700,fontSize:13}}>{p.name}</span>
-                  {streak&&<span style={{color:"#FF620099",fontSize:11,fontWeight:600}}>{streak.count}연승</span>}
-                </button>
+                <div key={p.id} style={{display:"flex",alignItems:"center",padding:"10px 0",borderTop:i===0?"none":"1px solid #1e1e1e",cursor:"pointer"}} onClick={()=>onSelectPlayer(p)}>
+                  <div style={{flex:1}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                      <span style={{fontSize:14,fontWeight:700,color:"#fff"}}>{p.name}</span>
+                      {tier&&<TierBadge tier={tier}/>}
+                    </div>
+                    <span style={{fontSize:11,color:"#FF620099"}}>{streak?`${streak.count}연승 진행 중 · 승률 ${p.win_rate}%`:`승률 ${p.win_rate}%`}</span>
+                  </div>
+                  <span style={{fontSize:12,color:"#333"}}>›</span>
+                </div>
               );
             })}
           </div>
@@ -675,12 +682,14 @@ function Players({ players, games, onReload, onSelectPlayer }: { players: Player
     <div style={S.page}>
       <div style={S.card}>
         <div style={S.cardHeader}><span style={S.cardTitle}>ADD PLAYER</span></div>
-        <div style={{display:"flex",gap:8}}>
-          <input style={{...S.input,flex:"0 1 120px"}} placeholder="이름" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()}/>
-          <select style={S.select} value={pos} onChange={e=>setPos(e.target.value)}>
-            {POSITIONS.map(p=><option key={p}>{p}</option>)}
-          </select>
-          <button style={{...S.btnPrimary,opacity:saving?.5:1,flexShrink:0}} onClick={add} disabled={saving}>{saving?"...":"추가"}</button>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{display:"flex",gap:8}}>
+            <input style={S.input} placeholder="이름 입력" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()}/>
+            <select style={S.select} value={pos} onChange={e=>setPos(e.target.value)}>
+              {POSITIONS.map(p=><option key={p}>{p}</option>)}
+            </select>
+          </div>
+          <button style={{...S.btnPrimary,opacity:saving?.5:1,width:"100%"}} onClick={add} disabled={saving}>{saving?"...":"추가"}</button>
         </div>
       </div>
       <div style={S.card}>
