@@ -4,11 +4,24 @@ import { useState, useEffect, useCallback } from "react";
 import { sb } from "../lib/supabase";
 
 const TIERS = [
-  { name: "DIAMOND", icon: "💎", color: "#60a5fa", min: 80 },
-  { name: "PLATINUM", icon: "⬡", color: "#34d399", min: 65 },
-  { name: "GOLD", icon: "★", color: "#fbbf24", min: 50 },
-  { name: "SILVER", icon: "◆", color: "#9ca3af", min: 35 },
-  { name: "BRONZE", icon: "●", color: "#b45309", min: 0 },
+  { name: "S+", color: "#F59E0B", min: 94 },
+  { name: "S",  color: "#F59E0B", min: 87 },
+  { name: "S-", color: "#F59E0B", min: 80 },
+  { name: "A+", color: "#F97316", min: 75 },
+  { name: "A",  color: "#F97316", min: 70 },
+  { name: "A-", color: "#F97316", min: 65 },
+  { name: "B+", color: "#22C55E", min: 60 },
+  { name: "B",  color: "#22C55E", min: 55 },
+  { name: "B-", color: "#22C55E", min: 50 },
+  { name: "C+", color: "#60A5FA", min: 45 },
+  { name: "C",  color: "#60A5FA", min: 40 },
+  { name: "C-", color: "#60A5FA", min: 35 },
+  { name: "D+", color: "#94A3B8", min: 30 },
+  { name: "D",  color: "#94A3B8", min: 25 },
+  { name: "D-", color: "#94A3B8", min: 20 },
+  { name: "E+", color: "#475569", min: 14 },
+  { name: "E",  color: "#475569", min: 7  },
+  { name: "E-", color: "#475569", min: 0  },
 ];
 
 interface Player {
@@ -51,6 +64,60 @@ function getNextTier(p: Player) {
 function uid() { return crypto.randomUUID(); }
 const POSITIONS = ["PG","SG","SF","PF","C"];
 
+const TITLES: {label:string; color:string; check:(p:Player, streak:{type:"W"|"L",count:number}|null, mvpCount:number, allPlayers:Player[])=>boolean}[] = [
+  { label:"사기캐 논란",      color:"#F59E0B", check:(_,s)=>s?.type==="W"&&s.count>=5 },
+  { label:"요즘 미친듯",      color:"#FF6200", check:(_,s)=>!!(s?.type==="W"&&s.count>=3) },
+  { label:"이쯤되면 재능없는거", color:"#475569", check:(_,s)=>!!(s?.type==="L"&&s.count>=5) },
+  { label:"슬럼프 아닌 실력",   color:"#475569", check:(_,s)=>!!(s?.type==="L"&&s.count>=3) },
+  { label:"MVP 도둑",         color:"#F59E0B", check:(_,__,mvp)=>mvp>=5 },
+  { label:"이거 실화냐",      color:"#F59E0B", check:(p)=>(p.wins+p.losses)>=5&&(p.win_rate??0)>=75 },
+  { label:"그나마 할줄앎",    color:"#60A5FA", check:(p)=>(p.wins+p.losses)>=5&&(p.win_rate??0)>=60 },
+  { label:"걸어다니는 쓰레기", color:"#475569", check:(p)=>(p.wins+p.losses)>=5&&(p.win_rate??0)<=25 },
+  { label:"지면 얘 탓",       color:"#475569", check:(p)=>(p.wins+p.losses)>=5&&(p.win_rate??0)<=40 },
+  { label:"인생이 농구",      color:"#60A5FA", check:(p,_,__,all)=>{const max=Math.max(...all.map(x=>x.wins+x.losses));return(p.wins+p.losses)===max&&max>=20;} },
+  { label:"검증 안됨",        color:"#444",    check:(p)=>(p.wins+p.losses)<3 },
+  { label:"없으나마나",        color:"#444",    check:()=>true },
+];
+function getAllTimeMaxStreak(playerId: string, games: Game[], type: "W"|"L"): number {
+  const pg = [...games]
+    .filter(g=>[...(g.team_a||[]),...(g.team_b||[])].includes(playerId))
+    .sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime());
+  let max=0, cur=0;
+  for (const g of pg) {
+    const inA=(g.team_a||[]).includes(playerId);
+    const won=(inA&&g.winner==="A")||(!inA&&g.winner==="B");
+    const hit=type==="W"?won:!won;
+    if(hit){cur++;max=Math.max(max,cur);}else cur=0;
+  }
+  return max;
+}
+
+function getTitle(p: Player, games: Game[], allPlayers: Player[]): {label:string;color:string} {
+  const streak = getStreak(p.id, games);
+  const mvpCount = games.filter(g=>g.mvp===p.id).length;
+  return TITLES.find(t=>t.check(p, streak, mvpCount, allPlayers))!;
+}
+
+function getStreak(playerId: string, games: Game[]): {type:"W"|"L", count:number}|null {
+  const pg = [...games]
+    .filter(g=>[...(g.team_a||[]),...(g.team_b||[])].includes(playerId))
+    .sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime());
+  if(pg.length<2) return null;
+  const res=(g:Game)=>{const inA=(g.team_a||[]).includes(playerId);return((inA&&g.winner==="A")||(!inA&&g.winner==="B"))?"W":"L";};
+  const first=res(pg[0]);
+  let count=1;
+  for(let i=1;i<pg.length;i++){if(res(pg[i])===first)count++;else break;}
+  return count>=2?{type:first,count}:null;
+}
+
+function Sparkline({values,color}:{values:number[],color:string}) {
+  if(values.length<3) return null;
+  const w=60,h=18;
+  const min=Math.min(...values),max=Math.max(...values),range=max-min||1;
+  const pts=values.map((v,i)=>`${(i/(values.length-1))*w},${h-((v-min)/range)*h}`).join(" ");
+  return <svg width={w} height={h} style={{overflow:"visible",flexShrink:0}}><polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+}
+
 export default function App() {
   const [tab, setTab] = useState("home");
   const [players, setPlayers] = useState<Player[]>([]);
@@ -90,7 +157,7 @@ export default function App() {
         <GlobalStyle />
         <header style={S.header}>
           <div style={S.headerInner}>
-            <button style={S.backBtn} onClick={() => setSelectedPlayer(null)}>← 뒤로</button>
+            <button style={{...S.backBtn,fontSize:20,fontWeight:300,padding:"4px 8px"}} onClick={() => setSelectedPlayer(null)}>‹</button>
             <span style={S.logoText}>HOOPS</span>
             <div style={{width:60}} />
           </div>
@@ -111,7 +178,7 @@ export default function App() {
             <span style={S.logoIcon}>🏀</span>
             <span style={S.logoText}>HOOPS</span>
           </div>
-          <span style={S.headerSub}>{games.length}G · {players.length}P</span>
+          <span style={S.headerSub}>{games.length}G / {players.length}P</span>
         </div>
       </header>
       {error && <div style={S.errorBar}>{error}<button style={S.errX} onClick={() => setError("")}>✕</button></div>}
@@ -124,8 +191,8 @@ export default function App() {
       </nav>
       <main style={S.main}>
         {tab === "home"    && <Home players={players} games={games} duels={duels} onSelectPlayer={setSelectedPlayer} />}
-        {tab === "players" && <Players players={players} onReload={load} onSelectPlayer={setSelectedPlayer} />}
-        {tab === "record"  && <RecordGame players={players} games={games} onReload={load} />}
+        {tab === "players" && <Players players={players} games={games} onReload={load} onSelectPlayer={setSelectedPlayer} />}
+        {tab === "record"  && <RecordGame players={players} onReload={load} />}
         {tab === "duel"    && <DuelTab players={players} duels={duels} onReload={load} onSelectPlayer={setSelectedPlayer} />}
         {tab === "log"     && <Log games={games} players={players} onReload={load} />}
       </main>
@@ -206,15 +273,10 @@ function ProfilePage({ player, games, duels, players, onReload }: {
     <div style={S.page}>
       {/* 프로필 헤더 */}
       <div style={S.profileHero}>
-        <div style={S.profileAvatar}><span style={{fontSize:32}}>🏀</span></div>
         <div style={S.profileInfo}>
-          <div style={S.profileName}>{player.name}</div>
-          <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginTop:4}}>
-            <PosTag pos={player.position} />
-            {tier
-              ? <span style={{...S.tierTag,color:tier.color,borderColor:tier.color+"40",background:tier.color+"10"}}>{tier.icon} {tier.name}</span>
-              : <span style={{...S.tierTag,color:"#9ca3af",borderColor:"#e5e7eb"}}>언랭 (3경기 필요)</span>
-            }
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
+            <div style={S.profileName}>{player.name}</div>
+            <TitleTag title={getTitle(player,games,players)}/>
           </div>
           {/* 시그니처 무브 */}
           <div style={{marginTop:8}}>
@@ -226,14 +288,22 @@ function ProfilePage({ player, games, duels, players, onReload }: {
               </div>
             ) : (
               <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <span style={{fontSize:12,color:player.signature?"#111":"#9ca3af"}}>
-                  {player.signature ? `✨ ${player.signature}` : "시그니처 무브 없음"}
+                <span style={{fontSize:12,color:player.signature?"#fff":"#555"}}>
+                  {player.signature ? `✦ ${player.signature}` : "시그니처 무브 없음"}
                 </span>
-                <button style={{...S.iconBtn,fontSize:11,color:"#9ca3af"}} onClick={()=>setEditSig(true)}>✏️</button>
+                <button style={{...S.iconBtn,fontSize:11,color:"#555"}} onClick={()=>setEditSig(true)}>수정</button>
               </div>
             )}
           </div>
         </div>
+      </div>
+
+      {/* 포지션 */}
+      <div style={{borderBottom:"1px solid #262626",padding:"20px 16px",display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontSize:11,fontWeight:700,color:"#555"}}>포지션</span>
+        <span style={{fontSize:15,fontWeight:800,color:"#fff"}}>
+          {({PG:"포인트 가드",SG:"슈팅 가드",SF:"스몰 포워드",PF:"파워 포워드",C:"센터"} as Record<string,string>)[player.position]??player.position}
+        </span>
       </div>
 
       {/* 핵심 스탯 */}
@@ -256,18 +326,40 @@ function ProfilePage({ player, games, duels, players, onReload }: {
         </div>
       </div>
 
+      {/* 승률 트렌드 */}
+      {(()=>{
+        const pg=[...games].filter(g=>[...(g.team_a||[]),...(g.team_b||[])].includes(player.id)).sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime());
+        if(pg.length<3) return null;
+        let w=0;
+        const trend=pg.map((g,i)=>{const inA=(g.team_a||[]).includes(player.id);if((inA&&g.winner==="A")||(!inA&&g.winner==="B"))w++;return Math.round(w/(i+1)*100);});
+        const last=trend[trend.length-1];
+        const prev=trend[trend.length-2];
+        const diff=last-prev;
+        return (
+          <div style={{...S.card,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:"#555",letterSpacing:1,marginBottom:4}}>WIN RATE TREND</div>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:22,fontWeight:900,fontFamily:"'Bebas Neue',sans-serif",color:"#fff",lineHeight:1}}>{last}%</span>
+                <span style={{fontSize:11,fontWeight:700,color:diff>0?"#22C55E":diff<0?"#ef4444":"#555"}}>{diff>0?`+${diff}`:diff}%</span>
+              </div>
+            </div>
+            <Sparkline values={trend} color={tier?.color??"#555"}/>
+          </div>
+        );
+      })()}
+
       {/* 최고 득점 */}
       {bestScore > 0 && (
-        <div style={{...S.card,background:"#111",border:"none"}}>
+        <div style={{...S.card,background:"rgba(255,98,0,0.08)",borderBottom:"1px solid rgba(255,98,0,0.2)"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div>
-              <div style={{fontSize:11,fontWeight:800,letterSpacing:2,color:"#6b7280",marginBottom:4}}>BEST GAME</div>
-              <div style={{fontSize:32,fontWeight:900,color:"#fff"}}>{bestScore} <span style={{fontSize:14,color:"#6b7280"}}>pts</span></div>
-              <div style={{fontSize:11,color:"#6b7280",marginTop:2}}>
+              <div style={{fontSize:11,fontWeight:800,letterSpacing:2,color:"#FF6200",marginBottom:4}}>BEST GAME</div>
+              <div style={{fontSize:36,fontWeight:900,color:"#fff",fontFamily:"'Bebas Neue',sans-serif",lineHeight:1}}>{bestScore} <span style={{fontSize:16,color:"#888"}}>pts</span></div>
+              <div style={{fontSize:12,color:"#555",marginTop:4}}>
                 {new Date(bestScoreGame!.created_at).toLocaleDateString("ko-KR",{month:"short",day:"numeric"})}
               </div>
             </div>
-            <span style={{fontSize:48}}>🏆</span>
           </div>
         </div>
       )}
@@ -280,10 +372,12 @@ function ProfilePage({ player, games, duels, players, onReload }: {
             const total = stat.wins+stat.losses;
             const wr = Math.round(stat.wins/total*100);
             return (
-              <div key={oppId} style={{...S.rankRow}}>
-                <span style={{flex:1,fontSize:14,fontWeight:700}}>{pname(oppId)}</span>
-                <span style={{fontSize:13,fontWeight:700,color:wr>=50?"#059669":"#dc2626"}}>{stat.wins}W {stat.losses}L</span>
-                <span style={{...S.statPill,marginLeft:6,color:wr>=50?"#059669":"#dc2626",background:wr>=50?"#d1fae5":"#fee2e2"}}>{wr}%</span>
+              <div key={oppId} style={{padding:"12px 0",borderBottom:"1px solid #1e1e1e"}}>
+                <div style={{display:"flex",alignItems:"center"}}>
+                  <span style={{flex:1,fontSize:14,fontWeight:700,color:"#fff"}}>{pname(oppId)}</span>
+                  <span style={{fontSize:11,color:"#444",marginRight:10}}>{stat.wins}W {stat.losses}L</span>
+                  <span style={{fontSize:22,fontWeight:900,fontFamily:"'Bebas Neue',sans-serif",color:"#fff",lineHeight:1}}>{wr}%</span>
+                </div>
               </div>
             );
           })}
@@ -294,19 +388,24 @@ function ProfilePage({ player, games, duels, players, onReload }: {
       {totalGames >= 3 && (
         <div style={S.card}>
           <div style={S.cardHeader}>
-            <span style={S.cardTitle}>TIER PROGRESS</span>
+            <div>
+              <span style={S.cardTitle}>TIER PROGRESS</span>
+              <div style={{marginTop:6}}>
+                {tier ? <TierBadge tier={tier}/> : <span style={{fontSize:12,color:"#444"}}>언랭</span>}
+              </div>
+            </div>
             {nextTier
-              ? <span style={{fontSize:11,color:"#6b7280"}}>{nextTier.tier.name}까지 {nextTier.gap}점</span>
-              : <span style={{fontSize:11,color:"#60a5fa"}}>최고 티어! 💎</span>
+              ? <span style={{fontSize:12,color:"#555"}}>{nextTier.tier.name}까지 {nextTier.gap}점</span>
+              : <span style={{fontSize:12,color:"#FF6200"}}>최고 Tier!</span>
             }
           </div>
-          <div style={{height:8,background:"#f1f5f9",borderRadius:4,overflow:"hidden"}}>
-            <div style={{height:"100%",width:`${Math.min(tierScore??0,100)}%`,background:tier?.color??"#e5e7eb",borderRadius:4,transition:"width .6s"}} />
+          <div style={{height:6,background:"#1e1e1e",borderRadius:4,overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${Math.min(tierScore??0,100)}%`,background:tier?.color??"#FF6200",borderRadius:4,transition:"width .6s"}} />
           </div>
           <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
-            <span style={{fontSize:10,color:"#9ca3af"}}>0</span>
-            <span style={{fontSize:11,fontWeight:700,color:"#111"}}>{tierScore}점</span>
-            <span style={{fontSize:10,color:"#9ca3af"}}>100</span>
+            <span style={{fontSize:12,color:"#444"}}>0</span>
+            <span style={{fontSize:12,fontWeight:700,color:"#888"}}>{tierScore}점</span>
+            <span style={{fontSize:12,color:"#444"}}>100</span>
           </div>
         </div>
       )}
@@ -317,36 +416,36 @@ function ProfilePage({ player, games, duels, players, onReload }: {
         {form.length === 0 ? <Empty text="경기 기록 없음" /> : (
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             {form.map((r,i) => (
-              <div key={i} style={{width:36,height:36,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:r==="W"?"#111":"#f8fafc",border:r==="W"?"none":"1px solid #e5e7eb",fontWeight:800,fontSize:13,color:r==="W"?"#fff":"#9ca3af"}}>{r}</div>
+              <div key={i} style={{width:36,height:36,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:r==="W"?"#FF6200":"#161616",border:r==="W"?"none":"1px solid #2a2a2a",fontWeight:800,fontSize:13,color:r==="W"?"#fff":"#444"}}>{r==="W"?"승":"패"}</div>
             ))}
             {[...Array(Math.max(0,5-form.length))].map((_,i)=>(
-              <div key={`e${i}`} style={{width:36,height:36,borderRadius:8,background:"#f8fafc",border:"1px dashed #e5e7eb"}} />
+              <div key={`e${i}`} style={{width:36,height:36,borderRadius:8,background:"#161616",border:"1px dashed #2a2a2a"}} />
             ))}
           </div>
         )}
       </div>
 
       {/* 베스트 파트너 / 천적 */}
-      <div style={{display:"flex",gap:10}}>
-        <div style={{...S.card,flex:1}}>
-          <div style={S.cardHeader}><span style={S.cardTitle}>🤝 파트너</span></div>
+      <div style={{...S.card,display:"flex",gap:10,padding:"20px 16px"}}>
+        <div style={{flex:1,background:"#161616",borderRadius:10,overflow:"hidden",borderTop:"2px solid #22C55E50",padding:"14px"}}>
+          <span style={{fontSize:10,fontWeight:800,letterSpacing:1.5,color:"#22C55E"}}>깐부</span>
           {bestPartner ? (
-            <>
-              <div style={{fontSize:15,fontWeight:800,color:"#111",marginBottom:2}}>{pname(bestPartner[0])}</div>
-              <div style={{fontSize:12,color:"#6b7280"}}>같이 뛸 때 {Math.round(bestPartner[1].wins/bestPartner[1].games*100)}%</div>
-              <div style={{fontSize:11,color:"#9ca3af"}}>{bestPartner[1].games}경기</div>
-            </>
-          ) : <Empty text="데이터 부족" />}
+            <div style={{marginTop:10}}>
+              <div style={{fontSize:17,fontWeight:800,color:"#fff",lineHeight:1.2,marginBottom:5}}>{pname(bestPartner[0])}</div>
+              <div style={{fontSize:12,color:"#22C55E",fontWeight:600,marginBottom:3}}>같이 뛰면 {Math.round(bestPartner[1].wins/bestPartner[1].games*100)}%로 이깁니다</div>
+              <div style={{fontSize:11,color:"#444"}}>{bestPartner[1].games}경기</div>
+            </div>
+          ) : <div style={{marginTop:10,fontSize:12,color:"#333"}}>데이터 부족</div>}
         </div>
-        <div style={{...S.card,flex:1}}>
-          <div style={S.cardHeader}><span style={S.cardTitle}>⚔️ 천적</span></div>
+        <div style={{flex:1,background:"#161616",borderRadius:10,overflow:"hidden",borderTop:"2px solid #ef444450",padding:"14px"}}>
+          <span style={{fontSize:10,fontWeight:800,letterSpacing:1.5,color:"#dc2626"}}>담당일진</span>
           {nemesis ? (
-            <>
-              <div style={{fontSize:15,fontWeight:800,color:"#111",marginBottom:2}}>{pname(nemesis[0])}</div>
-              <div style={{fontSize:12,color:"#dc2626"}}>맞붙으면 {Math.round((1-nemesis[1].wins/nemesis[1].games)*100)}% 패배</div>
-              <div style={{fontSize:11,color:"#9ca3af"}}>{nemesis[1].games}경기</div>
-            </>
-          ) : <Empty text="데이터 부족" />}
+            <div style={{marginTop:10}}>
+              <div style={{fontSize:17,fontWeight:800,color:"#fff",lineHeight:1.2,marginBottom:5}}>{pname(nemesis[0])}</div>
+              <div style={{fontSize:12,color:"#dc2626",fontWeight:600,marginBottom:3}}>붙으면 {Math.round((1-nemesis[1].wins/nemesis[1].games)*100)}%로 죽습니다</div>
+              <div style={{fontSize:11,color:"#444"}}>{nemesis[1].games}경기</div>
+            </div>
+          ) : <div style={{marginTop:10,fontSize:12,color:"#333"}}>데이터 부족</div>}
         </div>
       </div>
 
@@ -399,19 +498,19 @@ function Home({ players, games, duels, onSelectPlayer }: { players: Player[]; ga
           <span style={{...S.summaryNum,fontSize:15,cursor:"pointer"}} onClick={()=>mvpSorted[0]&&onSelectPlayer(mvpSorted[0])}>
             {mvpSorted[0]?.name??"—"}
           </span>
-          <span style={S.summaryLabel}>MVP 👑</span>
+          <span style={{...S.summaryLabel,display:"flex",alignItems:"center",gap:3}}><img src="/crown.png" style={{width:13,height:13}}/>MVP</span>
         </div>
       </div>
 
       {hotPlayers.length>0&&(
-        <div style={{...S.card,background:"#111",border:"none"}}>
+        <div style={{...S.card,background:"rgba(255,98,0,0.07)",borderBottom:"1px solid rgba(255,98,0,0.18)"}}>
           <div style={S.cardHeader}>
-            <span style={{...S.cardTitle,color:"#fff"}}>🔥 요즘 핫함</span>
-            <span style={{fontSize:11,color:"#6b7280"}}>최근 3연승</span>
+            <span style={{...S.cardTitle,color:"#FF6200"}}>요즘 핫함</span>
+            <span style={{fontSize:12,color:"#FF620077"}}>최근 3연승</span>
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {hotPlayers.map(p=>(
-              <button key={p.id} style={{background:"#222",border:"none",borderRadius:20,padding:"6px 14px",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}} onClick={()=>onSelectPlayer(p)}>
+              <button key={p.id} style={{background:"rgba(255,98,0,0.15)",border:"1px solid rgba(255,98,0,0.3)",borderRadius:20,padding:"6px 14px",color:"#FF6200",fontWeight:700,fontSize:13,cursor:"pointer"}} onClick={()=>onSelectPlayer(p)}>
                 {p.name}
               </button>
             ))}
@@ -429,20 +528,22 @@ function Home({ players, games, duels, onSelectPlayer }: { players: Player[]; ga
           const tier=getTier(p);
           return (
             <div key={p.id} style={{...S.rankRow,cursor:"pointer"}} onClick={()=>onSelectPlayer(p)}>
-              <span style={{...S.rankIdx,color:i<3?"#111":"#9ca3af"}}>{i+1}</span>
+              <span style={{...S.rankIdx,color:i<3?"#FF6200":"#555"}}>{i+1}</span>
               <div style={S.rankInfo}>
-                <div style={S.rankTop}>
-                  <span style={S.rankName}>{p.name}</span>
-                  <PosTag pos={p.position}/>
-                  {tier&&<span style={{...S.tierTag,color:tier.color,borderColor:tier.color+"40",background:tier.color+"10"}}>{tier.icon} {tier.name}</span>}
+                <div style={{...S.rankTop,justifyContent:"space-between"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={S.rankName}>{p.name}</span>
+                    <PosTag pos={p.position}/>
+                  </div>
+                  {tier&&<TierBadge tier={tier}/>}
                 </div>
-                <div style={S.rankBar}><div style={{...S.rankFill,width:`${p.win_rate||0}%`,background:i===0?"#111":"#e5e7eb"}}/></div>
+                <div style={S.rankBar}><div style={{...S.rankFill,width:`${p.win_rate||0}%`,background:i===0?"#FF6200":"#2a2a2a"}}/></div>
               </div>
               <div style={S.rankStat}>
                 <span style={S.rankRate}>{p.win_rate||0}%</span>
                 <span style={S.rankRecord}>{p.wins}W {p.losses}L</span>
               </div>
-              <span style={{fontSize:12,color:"#d1d5db"}}>›</span>
+              <span style={{fontSize:12,color:"#444"}}>›</span>
             </div>
           );
         })}
@@ -459,16 +560,16 @@ function Home({ players, games, duels, onSelectPlayer }: { players: Player[]; ga
             const wr=total>0?Math.round((p.duel_wins||0)/total*100):0;
             return (
               <div key={p.id} style={{...S.rankRow,cursor:"pointer"}} onClick={()=>onSelectPlayer(p)}>
-                <span style={{...S.rankIdx,color:i<3?"#111":"#9ca3af"}}>{i+1}</span>
+                <span style={{...S.rankIdx,color:i<3?"#FF6200":"#555"}}>{i+1}</span>
                 <div style={S.rankInfo}>
                   <div style={S.rankTop}><span style={S.rankName}>{p.name}</span><PosTag pos={p.position}/></div>
-                  <div style={S.rankBar}><div style={{...S.rankFill,width:`${wr}%`,background:i===0?"#111":"#e5e7eb"}}/></div>
+                  <div style={S.rankBar}><div style={{...S.rankFill,width:`${wr}%`,background:i===0?"#FF6200":"#2a2a2a"}}/></div>
                 </div>
                 <div style={S.rankStat}>
                   <span style={S.rankRate}>{wr}%</span>
                   <span style={S.rankRecord}>{p.duel_wins||0}W {p.duel_losses||0}L</span>
                 </div>
-                <span style={{fontSize:12,color:"#d1d5db"}}>›</span>
+                <span style={{fontSize:12,color:"#444"}}>›</span>
               </div>
             );
           })}
@@ -481,20 +582,22 @@ function Home({ players, games, duels, onSelectPlayer }: { players: Player[]; ga
           <span style={S.cardSub}>누적</span>
         </div>
         {mvpSorted.filter(p=>p.mvp>0).length===0&&<Empty text="MVP 기록 없음"/>}
-        {mvpSorted.filter(p=>p.mvp>0).map((p,i)=>(
+        {mvpSorted.filter(p=>p.mvp>0).map((p,i)=>{
+          return (
           <div key={p.id} style={{...S.rankRow,cursor:"pointer"}} onClick={()=>onSelectPlayer(p)}>
-            <span style={{...S.rankIdx,color:i===0?"#fbbf24":i===1?"#9ca3af":i===2?"#b45309":"#9ca3af"}}>{i+1}</span>
+            <span style={{...S.rankIdx,color:i===0?"#FF6200":i===1?"#888":i===2?"#666":"#555"}}>{i+1}</span>
             <div style={S.rankInfo}>
               <div style={S.rankTop}><span style={S.rankName}>{p.name}</span><PosTag pos={p.position}/></div>
-              <div style={S.rankBar}><div style={{...S.rankFill,width:`${Math.min((p.mvp/Math.max(...mvpSorted.map(x=>x.mvp),1))*100,100)}%`,background:"#fbbf24"}}/></div>
             </div>
-            <div style={S.rankStat}>
-              <span style={{...S.rankRate,color:"#fbbf24"}}>🏆 {p.mvp}</span>
-              <span style={S.rankRecord}>MVP</span>
+            <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+              <img src="/crown.png" style={{width:13,height:13,verticalAlign:"middle"}}/>
+              <span style={{fontSize:12,fontWeight:700,color:"#FF6200",fontFamily:"'Noto Sans KR',sans-serif"}}>MVP</span>
+              <span style={{...S.rankRate,color:"#FF6200"}}>{p.mvp}</span>
             </div>
-            <span style={{fontSize:12,color:"#d1d5db"}}>›</span>
+            <span style={{fontSize:12,color:"#444"}}>›</span>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {lastGame&&(
@@ -503,12 +606,44 @@ function Home({ players, games, duels, onSelectPlayer }: { players: Player[]; ga
           <GameCard game={lastGame} players={players}/>
         </div>
       )}
+
+      {players.length>0&&games.length>0&&(()=>{
+        const bestWin=players.map(p=>({p,n:getAllTimeMaxStreak(p.id,games,"W")})).sort((a,b)=>b.n-a.n)[0];
+        const worstLoss=players.map(p=>({p,n:getAllTimeMaxStreak(p.id,games,"L")})).sort((a,b)=>b.n-a.n)[0];
+        const blowout=[...games].sort((a,b)=>Math.abs(b.score_a-b.score_b)-Math.abs(a.score_a-a.score_b))[0];
+        const blowoutDiff=blowout?Math.abs(blowout.score_a-blowout.score_b):0;
+        const ironMan=[...players].sort((a,b)=>(b.wins+b.losses)-(a.wins+a.losses))[0];
+        const topWr=players.filter(p=>p.wins+p.losses>=5).sort((a,b)=>(b.win_rate??0)-(a.win_rate??0))[0];
+        const bottomWr=players.filter(p=>p.wins+p.losses>=5).sort((a,b)=>(a.win_rate??0)-(b.win_rate??0))[0];
+        const teamHighScore=games.length>0?Math.max(...games.flatMap(g=>[g.score_a,g.score_b])):0;
+        const rows=[
+          {label:"역대 최장 연승", name:bestWin?.p.name,   stat:`${bestWin?.n}연승`,                             color:"#F59E0B"},
+          {label:"역대 최장 연패", name:worstLoss?.p.name, stat:`${worstLoss?.n}연패`,                           color:"#475569"},
+          {label:"역대 최고 승률", name:topWr?.name,       stat:topWr?`${topWr.win_rate}%`:null,                 color:"#FF6200"},
+          {label:"역대 최저 승률", name:bottomWr?.name,    stat:bottomWr?`${bottomWr.win_rate}%`:null,           color:"#475569"},
+          {label:"최다 경기 출전", name:ironMan?.name,     stat:`${(ironMan?.wins??0)+(ironMan?.losses??0)}경기`, color:"#60A5FA"},
+          {label:"팀 최고 스코어", name:null,              stat:teamHighScore?`${teamHighScore}점`:null,          color:"#60A5FA"},
+          {label:"최대 점수 차",   name:blowout?`${blowout.score_a} - ${blowout.score_b}`:null, stat:blowoutDiff?`${blowoutDiff}점 차`:null, color:"#555"},
+        ];
+        return (
+          <div style={S.card}>
+            <div style={S.cardHeader}><span style={S.cardTitle}>통산 기록</span></div>
+            {rows.filter(r=>r.name&&r.stat).map((r,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",paddingTop:i===0?0:12,marginTop:i===0?0:12,borderTop:i===0?"none":"1px solid #1e1e1e"}}>
+                <span style={{flex:1,fontSize:13,color:"#555",fontWeight:600}}>{r.label}</span>
+                <span style={{fontSize:13,fontWeight:700,color:"#888",marginRight:10}}>{r.name}</span>
+                <span style={{fontSize:18,fontWeight:900,fontFamily:"'Bebas Neue',sans-serif",color:r.color,lineHeight:1}}>{r.stat}</span>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }
 
 // ── PLAYERS ───────────────────────────────────────────────────────────────────
-function Players({ players, onReload, onSelectPlayer }: { players: Player[]; onReload: () => void; onSelectPlayer: (p:Player)=>void }) {
+function Players({ players, games, onReload, onSelectPlayer }: { players: Player[]; games: Game[]; onReload: () => void; onSelectPlayer: (p:Player)=>void }) {
   const [name, setName] = useState("");
   const [pos, setPos] = useState("PG");
   const [saving, setSaving] = useState(false);
@@ -519,7 +654,7 @@ function Players({ players, onReload, onSelectPlayer }: { players: Player[]; onR
     setSaving(true);
     try {
       await sb.post("players",{id:uid(),name:name.trim(),position:pos,wins:0,losses:0,mvp:0,win_rate:0,avg_points:0,signature:"",best_score:0,duel_wins:0,duel_losses:0});
-      setName(""); await onReload();
+      setName(""); onReload();
     } finally { setSaving(false); }
   }
   async function del(id: string) {
@@ -552,37 +687,41 @@ function Players({ players, onReload, onSelectPlayer }: { players: Player[]; onR
         {players.length===0&&<Empty text="선수가 없습니다"/>}
         {players.map(p=>{
           const tier=getTier(p);
+          const streak=getStreak(p.id,games);
+          const title=getTitle(p,games,players);
           return (
-            <div key={p.id} style={S.playerRow}>
-              {editing?.id===p.id?(
-                <div style={S.editRow}>
-                  <input style={{...S.input,flex:1}} value={editing.name} onChange={e=>setEditing({...editing,name:e.target.value})}/>
-                  <select style={S.select} value={editing.position} onChange={e=>setEditing({...editing,position:e.target.value})}>
-                    {POSITIONS.map(pos=><option key={pos}>{pos}</option>)}
-                  </select>
-                  <button style={S.btnPrimary} onClick={saveEdit}>저장</button>
-                  <button style={S.btnGhost} onClick={()=>setEditing(null)}>취소</button>
+            <div key={p.id} style={{...S.playerRow,flexDirection:"column",alignItems:"stretch",gap:0}}>
+              <div style={{display:"flex",alignItems:"center"}}>
+                <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>onSelectPlayer(p)}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                    <span style={{fontSize:16,fontWeight:700,color:"#fff"}}>{p.name}</span>
+                    <PosTag pos={p.position}/>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={S.rankRecord}>{p.wins}W {p.losses}L</span>
+                    {streak&&<span style={{fontSize:11,fontWeight:600,color:"#444"}}>{streak.count}{streak.type==="W"?"연승":"연패"}</span>}
+                    <TitleTag title={title}/>
+                  </div>
                 </div>
-              ):(
-                <>
-                  <div style={{...S.playerLeft,cursor:"pointer"}} onClick={()=>onSelectPlayer(p)}>
-                    <div style={S.playerTop}>
-                      <span style={S.playerName}>{p.name}</span>
-                      <PosTag pos={p.position}/>
-                      {tier&&<span style={{...S.tierTag,color:tier.color,borderColor:tier.color+"40",background:tier.color+"10"}}>{tier.icon} {tier.name}</span>}
-                    </div>
-                    <div style={S.playerStats}>
-                      <span style={S.statPill}>{p.wins}W {p.losses}L</span>
-                      <span style={{...S.statPill,color:(p.win_rate||0)>=60?"#059669":(p.win_rate||0)>=40?"#d97706":"#dc2626",background:(p.win_rate||0)>=60?"#d1fae5":(p.win_rate||0)>=40?"#fef3c7":"#fee2e2"}}>{p.win_rate||0}%</span>
-                      {p.mvp>0&&<span style={{...S.statPill,color:"#d97706",background:"#fef3c7"}}>🏆 ×{p.mvp}</span>}
-                      {p.signature&&<span style={{...S.statPill,color:"#7c3aed",background:"#ede9fe"}}>✨ {p.signature}</span>}
-                    </div>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                  {tier&&<TierBadge tier={tier} label={false}/>}
+                  <span style={{fontSize:22,fontWeight:900,color:"#fff",fontFamily:"'Bebas Neue',sans-serif",lineHeight:1}}>{p.win_rate||0}%</span>
+                  <button style={{background:"none",border:"none",color:"#333",fontSize:18,cursor:"pointer",padding:"0 4px",lineHeight:1,letterSpacing:1}} onClick={e=>{e.stopPropagation();setEditing(editing?.id===p.id?null:{id:p.id,name:p.name,position:p.position})}}>···</button>
+                </div>
+              </div>
+              {editing?.id===p.id&&(
+                <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #1e1e1e",display:"flex",flexDirection:"column",gap:8}}>
+                  <div style={{display:"flex",gap:8}}>
+                    <input style={{...S.input,flex:1}} value={editing.name} onChange={e=>setEditing({...editing,name:e.target.value})}/>
+                    <select style={S.select} value={editing.position} onChange={e=>setEditing({...editing,position:e.target.value})}>
+                      {POSITIONS.map(pos=><option key={pos}>{pos}</option>)}
+                    </select>
                   </div>
-                  <div style={S.playerActions}>
-                    <button style={S.iconBtn} onClick={()=>setEditing({id:p.id,name:p.name,position:p.position})}>✏️</button>
-                    <button style={S.iconBtn} onClick={()=>del(p.id)}>🗑</button>
+                  <div style={{display:"flex",gap:8}}>
+                    <button style={{...S.btnPrimary,flex:1}} onClick={saveEdit}>저장</button>
+                    <button style={{...S.btnGhost,flex:1,color:"#ef4444",borderColor:"#333"}} onClick={()=>del(p.id)}>삭제</button>
                   </div>
-                </>
+                </div>
               )}
             </div>
           );
@@ -593,7 +732,7 @@ function Players({ players, onReload, onSelectPlayer }: { players: Player[]; onR
 }
 
 // ── RECORD GAME ───────────────────────────────────────────────────────────────
-function RecordGame({ players, games, onReload }: { players: Player[]; games: Game[]; onReload: () => void }) {
+function RecordGame({ players, onReload }: { players: Player[]; onReload: () => void }) {
   const [scoreA, setScoreA] = useState("");
   const [scoreB, setScoreB] = useState("");
   const [teamA, setTeamA] = useState<string[]>([]);
@@ -602,7 +741,7 @@ function RecordGame({ players, games, onReload }: { players: Player[]; games: Ga
   const [guestsB, setGuestsB] = useState<string[]>([]);
   const [guestInput, setGuestInput] = useState("");
   const [guestTeam, setGuestTeam] = useState<"A"|"B">("A");
-  const [winner, setWinner] = useState("A");
+  const winner = Number(scoreA) >= Number(scoreB) ? "A" : "B";
   const [mvp, setMvp] = useState("");
   const [playerScores, setPlayerScores] = useState<Record<string,string>>({});
   const [showScores, setShowScores] = useState(false);
@@ -658,15 +797,14 @@ function RecordGame({ players, games, onReload }: { players: Player[]; games: Ga
         await sb.patch("players",{wins:nw,losses:nl,mvp:nm,win_rate:nr,avg_points:Math.round(newAvg*10)/10,best_score:newBest},`?id=eq.${p.id}`);
       }));
       setDone(true);
-      setTimeout(()=>{setDone(false);setScoreA("");setScoreB("");setTeamA([]);setTeamB([]);setGuestsA([]);setGuestsB([]);setWinner("A");setMvp("");setPlayerScores({});onReload();},1500);
+      setTimeout(()=>{setDone(false);setScoreA("");setScoreB("");setTeamA([]);setTeamB([]);setGuestsA([]);setGuestsB([]);setMvp("");setPlayerScores({});onReload();},1500);
     } catch(e:any){setErr(e.message);}
     finally{setSaving(false);}
   }
 
   if(done) return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"60vh",gap:12}}>
-      <span style={{fontSize:48}}>✅</span>
-      <span style={{fontSize:18,fontWeight:700,color:"#111"}}>저장 완료!</span>
+      <span style={{fontSize:18,fontWeight:700,color:"#FF6200",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2}}>SAVED</span>
     </div>
   );
 
@@ -677,53 +815,63 @@ function RecordGame({ players, games, onReload }: { players: Player[]; games: Ga
           <span style={S.cardTitle}>SCORE</span>
           {modeLabel()&&<span style={{fontSize:13,fontWeight:800,color:"#111",background:"#f1f5f9",padding:"3px 10px",borderRadius:20}}>{modeLabel()}</span>}
         </div>
-        <div style={S.scoreRow}>
-          <div style={S.scoreSide}>
-            <span style={S.scoreLabel}>TEAM A</span>
-            <input style={S.scoreInput} type="number" min="0" placeholder="0" value={scoreA} onChange={e=>setScoreA(e.target.value)}/>
-          </div>
-          <span style={S.scoreVs}>vs</span>
-          <div style={S.scoreSide}>
-            <span style={S.scoreLabel}>TEAM B</span>
-            <input style={S.scoreInput} type="number" min="0" placeholder="0" value={scoreB} onChange={e=>setScoreB(e.target.value)}/>
-          </div>
+        <div style={{display:"flex",justifyContent:"center",gap:16,marginBottom:6}}>
+          <div style={{width:72,textAlign:"center"}}><span style={S.scoreLabel}>TEAM A</span></div>
+          <div style={{width:32}}/>
+          <div style={{width:72,textAlign:"center"}}><span style={S.scoreLabel}>TEAM B</span></div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:16}}>
+          <input style={S.scoreInput} type="number" min="0" placeholder="0" value={scoreA} onChange={e=>setScoreA(e.target.value)}/>
+          <span style={{fontSize:28,color:"#fff",fontWeight:900,fontFamily:"'Bebas Neue',sans-serif",lineHeight:1,width:32,textAlign:"center"}}>VS</span>
+          <input style={S.scoreInput} type="number" min="0" placeholder="0" value={scoreB} onChange={e=>setScoreB(e.target.value)}/>
         </div>
       </div>
 
       <div style={S.card}>
-        <div style={S.cardHeader}><span style={S.cardTitle}>TEAMS</span></div>
-        <div style={S.teamGrid}>
+        <div style={{display:"flex",gap:10,marginTop:6}}>
           {(["A","B"] as const).map(t=>{
             const myTeam=t==="A"?teamA:teamB;
             const myGuests=t==="A"?guestsA:guestsB;
-            const accent=t==="A"?"#2563eb":"#dc2626";
+            const accent=t==="A"?"#FF6200":"#3b82f6";
+            const total=myTeam.length+myGuests.length;
             return (
-              <div key={t} style={S.teamCol}>
-                <div style={{...S.teamHead,borderColor:accent,color:accent}}>TEAM {t} · {myTeam.length+myGuests.length}명</div>
-                {myTeam.map(id=>{const p=players.find(x=>x.id===id);return p?(
-                  <div key={id} style={S.teamMember}>
-                    <PosTag pos={p.position}/>
-                    <span style={{flex:1,fontSize:12,fontWeight:500}}>{p.name}</span>
-                    <button style={S.removeBtn} onClick={()=>toggleTeam(t,id)}>✕</button>
-                  </div>
-                ):null;})}
-                {myGuests.map((name,i)=>(
-                  <div key={`g${i}`} style={S.teamMember}>
-                    <span style={{fontSize:9,padding:"2px 5px",borderRadius:3,background:"#f1f5f900",color:"#9ca3af",border:"1px solid #e5e7eb",fontWeight:700}}>GUEST</span>
-                    <span style={{flex:1,fontSize:12,color:"#6b7280"}}>{name}</span>
-                    <button style={S.removeBtn} onClick={()=>{
-                      if(t==="A") setGuestsA(prev=>prev.filter((_,idx)=>idx!==i));
-                      else setGuestsB(prev=>prev.filter((_,idx)=>idx!==i));
-                    }}>✕</button>
-                  </div>
-                ))}
-                <div style={S.freeList}>
-                  {free.map(p=>(
-                    <button key={p.id} style={S.freeBtn} onClick={()=>toggleTeam(t,p.id)}>
-                      <PosTag pos={p.position}/><span style={{fontSize:12,flex:1,textAlign:"left"}}>{p.name}</span>
-                      <span style={{color:accent,fontWeight:700}}>+</span>
-                    </button>
+              <div key={t} style={{flex:1,minWidth:0,borderRadius:10,border:`1px solid ${accent}80`,overflow:"hidden"}}>
+                {/* 팀 헤더 */}
+                <div style={{background:accent+"bb",padding:"8px 10px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <span style={{fontSize:13,fontWeight:800,color:"#fff",fontFamily:"'Noto Sans KR',sans-serif",letterSpacing:0}}>TEAM {t}</span>
+                  {total>0&&<span style={{fontSize:13,fontWeight:800,color:"#fff",fontFamily:"'Noto Sans KR',sans-serif"}}>{total}</span>}
+                </div>
+                {/* 등록 멤버 */}
+                <div style={{padding:"6px 10px",background:"#111"}}>
+                  {myTeam.map(id=>{const p=players.find(x=>x.id===id);return p?(
+                    <div key={id} style={{display:"flex",alignItems:"center",gap:4,padding:"9px 0",borderBottom:"1px solid #1e1e1e"}}>
+                      <span style={{fontSize:13,fontWeight:600,color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                      <PosTag pos={p.position}/>
+                      <span style={{flex:1}}/>
+                      <button style={{background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,fontWeight:700,padding:"0 2px",lineHeight:1,flexShrink:0}} onClick={()=>toggleTeam(t,id)}>×</button>
+                    </div>
+                  ):null;})}
+                  {myGuests.map((gname,i)=>(
+                    <div key={`g${i}`} style={{display:"flex",alignItems:"center",gap:6,padding:"9px 0",borderBottom:"1px solid #1e1e1e"}}>
+                      <span style={{fontSize:10,padding:"2px 5px",borderRadius:3,background:"transparent",color:"#555",border:"1px solid #333",fontWeight:700,flexShrink:0}}>GUEST</span>
+                      <span style={{flex:1,fontSize:13,color:"#888",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gname}</span>
+                      <button style={{background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,fontWeight:700,padding:"0 2px",lineHeight:1}} onClick={()=>{
+                        if(t==="A") setGuestsA(prev=>prev.filter((_,idx)=>idx!==i));
+                        else setGuestsB(prev=>prev.filter((_,idx)=>idx!==i));
+                      }}>×</button>
+                    </div>
                   ))}
+                  {/* 추가 가능 선수 */}
+                  {free.length>0&&<div style={{marginTop:4}}>
+                    {free.map(p=>(
+                      <button key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"9px 0",width:"100%",background:"transparent",border:"none",cursor:"pointer",borderBottom:"1px solid #1a1a1a"}} onClick={()=>toggleTeam(t,p.id)}>
+                        <span style={{fontSize:12,color:"#999"}}>{p.name}</span>
+                        <PosTag pos={p.position}/>
+                        <span style={{flex:1}}/>
+                        <span style={{color:accent,fontWeight:800,fontSize:16,lineHeight:1,flexShrink:0}}>+</span>
+                      </button>
+                    ))}
+                  </div>}
                 </div>
               </div>
             );
@@ -731,7 +879,7 @@ function RecordGame({ players, games, onReload }: { players: Player[]; games: Ga
         </div>
 
         {/* 게스트 추가 */}
-        <div style={{borderTop:"1px solid #f1f5f9",marginTop:10,paddingTop:10}}>
+        <div style={{borderTop:"1px solid #262626",marginTop:14,paddingTop:12}}>
           <div style={S.fieldLabel}>게스트 추가</div>
           <div style={{display:"flex",gap:6}}>
             <input style={{...S.input,flex:1}} placeholder="게스트 이름" value={guestInput} onChange={e=>setGuestInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addGuest()}/>
@@ -746,16 +894,9 @@ function RecordGame({ players, games, onReload }: { players: Player[]; games: Ga
 
       <div style={S.card}>
         <div style={S.cardHeader}><span style={S.cardTitle}>RESULT</span></div>
-        <div style={{marginBottom:14}}>
-          <div style={S.fieldLabel}>승리팀</div>
-          <div style={S.winRow}>
-            {(["A","B"] as const).map(t=>(
-              <button key={t} onClick={()=>setWinner(t)} style={{...S.winBtn,background:winner===t?"#111":"transparent",color:winner===t?"#fff":"#6b7280",borderColor:winner===t?"#111":"#e5e7eb"}}>
-                TEAM {t} {winner===t?"🏆":""}
-              </button>
-            ))}
-          </div>
-        </div>
+        {scoreA&&scoreB&&<div style={{marginBottom:14,padding:"8px 12px",background:"rgba(255,98,0,0.08)",borderRadius:8,fontSize:12,color:"#FF6200",fontWeight:700}}>
+          TEAM {winner} WIN ({Number(scoreA) > Number(scoreB) ? `${scoreA} : ${scoreB}` : `${scoreB} : ${scoreA}`})
+        </div>}
         <div style={{marginBottom:14}}>
           <div style={S.fieldLabel}>MVP (선택)</div>
           <select style={{...S.select,width:"100%"}} value={mvp} onChange={e=>setMvp(e.target.value)}>
@@ -782,7 +923,7 @@ function RecordGame({ players, games, onReload }: { players: Player[]; games: Ga
           )}
         </div>
         {err&&<p style={{color:"#dc2626",fontSize:12,marginTop:8}}>{err}</p>}
-        <button style={{...S.btnPrimary,width:"100%",padding:"13px 0",marginTop:12,fontSize:15,opacity:saving?.6:1}} onClick={submit} disabled={saving}>
+        <button style={{...S.btnPrimary,width:"100%",padding:"16px 0",marginTop:12,fontSize:16,opacity:saving?.6:1}} onClick={submit} disabled={saving}>
           {saving?"저장 중...":"경기 저장"}
         </button>
       </div>
@@ -823,8 +964,7 @@ function DuelTab({ players, duels, onReload, onSelectPlayer }: { players: Player
 
   if(done) return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"60vh",gap:12}}>
-      <span style={{fontSize:48}}>⚔️</span>
-      <span style={{fontSize:18,fontWeight:700,color:"#111"}}>저장 완료!</span>
+      <span style={{fontSize:18,fontWeight:700,color:"#FF6200",fontFamily:"'Bebas Neue',sans-serif",letterSpacing:2}}>SAVED</span>
     </div>
   );
 
@@ -837,7 +977,7 @@ function DuelTab({ players, duels, onReload, onSelectPlayer }: { players: Player
             <option value="">선수 선택</option>
             {players.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <span style={{color:"#9ca3af",fontWeight:700,fontSize:14}}>vs</span>
+          <span style={{color:"#555",fontWeight:700,fontSize:14}}>vs</span>
           <select style={{...S.select,flex:1}} value={pB} onChange={e=>setPB(e.target.value)}>
             <option value="">선수 선택</option>
             {players.filter(p=>p.id!==pA).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
@@ -855,8 +995,8 @@ function DuelTab({ players, duels, onReload, onSelectPlayer }: { players: Player
           </div>
         </div>
         {err&&<p style={{color:"#dc2626",fontSize:12,margin:"8px 0"}}>{err}</p>}
-        <button style={{...S.btnPrimary,width:"100%",padding:"13px 0",marginTop:12,fontSize:15,opacity:saving?.6:1}} onClick={submit} disabled={saving}>
-          {saving?"저장 중...":"⚔️ 결과 저장"}
+        <button style={{...S.btnPrimary,width:"100%",padding:"16px 0",marginTop:12,fontSize:16,opacity:saving?.6:1}} onClick={submit} disabled={saving}>
+          {saving?"저장 중...":"결과 저장"}
         </button>
       </div>
 
@@ -867,32 +1007,29 @@ function DuelTab({ players, duels, onReload, onSelectPlayer }: { players: Player
         </div>
         {duels.length===0&&<Empty text="1vs1 기록이 없습니다"/>}
         {duels.slice(0,20).map(d=>{
-          const date=new Date(d.created_at).toLocaleDateString("ko-KR",{month:"short",day:"numeric"});
+          const dt=new Date(d.created_at);
+          const date=`${dt.getMonth()+1}/${String(dt.getDate()).padStart(2,"0")}`;
           const aWon=d.winner===d.player_a;
+          const doDelete=async()=>{
+            if(!confirm("이 1vs1 기록을 삭제할까요?")) return;
+            await sb.del("duels",`?id=eq.${d.id}`);
+            const remaining = duels.filter(x=>x.id!==d.id);
+            for(const pid of [d.player_a, d.player_b]){
+              const p=players.find(x=>x.id===pid); if(!p) continue;
+              const myD=remaining.filter(x=>x.player_a===pid||x.player_b===pid);
+              await sb.patch("players",{duel_wins:myD.filter(x=>x.winner===pid).length,duel_losses:myD.length-myD.filter(x=>x.winner===pid).length},`?id=eq.${pid}`);
+            }
+            onReload();
+          };
           return (
-            <div key={d.id} style={{...S.gameWrap, position:"relative"}}>
-              <button style={S.delBtn} onClick={async()=>{
-                if(!confirm("이 1vs1 기록을 삭제할까요?")) return;
-                await sb.del("duels",`?id=eq.${d.id}`);
-                // 두 선수 duel 스탯 재계산
-                const remaining = duels.filter(x=>x.id!==d.id);
-                for(const pid of [d.player_a, d.player_b]){
-                  const p=players.find(x=>x.id===pid); if(!p) continue;
-                  const myD=remaining.filter(x=>x.player_a===pid||x.player_b===pid);
-                  const dw=myD.filter(x=>x.winner===pid).length;
-                  const dl=myD.length-dw;
-                  await sb.patch("players",{duel_wins:dw,duel_losses:dl},`?id=eq.${pid}`);
-                }
-                onReload();
-              }}>🗑</button>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:11,color:"#9ca3af",width:36}}>{date}</span>
-                <span style={{flex:1,fontSize:14,fontWeight:aWon?800:500,color:aWon?"#111":"#9ca3af",cursor:"pointer"}} onClick={()=>{const p=players.find(x=>x.id===d.player_a);if(p)onSelectPlayer(p);}}>{pname(d.player_a)}</span>
-                <span style={{fontSize:20,fontWeight:900,color:aWon?"#111":"#9ca3af"}}>{d.score_a}</span>
-                <span style={{fontSize:12,color:"#d1d5db"}}>:</span>
-                <span style={{fontSize:20,fontWeight:900,color:!aWon?"#111":"#9ca3af"}}>{d.score_b}</span>
-                <span style={{flex:1,fontSize:14,fontWeight:!aWon?800:500,color:!aWon?"#111":"#9ca3af",textAlign:"right",cursor:"pointer"}} onClick={()=>{const p=players.find(x=>x.id===d.player_b);if(p)onSelectPlayer(p);}}>{pname(d.player_b)}</span>
-              </div>
+            <div key={d.id} style={{...S.gameWrap,display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:12,color:"#555",width:30,flexShrink:0}}>{date}</span>
+              <span style={{flex:1,fontSize:14,fontWeight:aWon?700:400,color:aWon?"#fff":"#555",cursor:"pointer",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} onClick={()=>{const p=players.find(x=>x.id===d.player_a);if(p)onSelectPlayer(p);}}>{pname(d.player_a)}</span>
+              <span style={{fontSize:22,fontWeight:900,color:aWon?"#fff":"#555",fontFamily:"'Bebas Neue',sans-serif",flexShrink:0}}>{d.score_a}</span>
+              <span style={{fontSize:12,color:"#333",flexShrink:0}}>:</span>
+              <span style={{fontSize:22,fontWeight:900,color:!aWon?"#fff":"#555",fontFamily:"'Bebas Neue',sans-serif",flexShrink:0}}>{d.score_b}</span>
+              <span style={{flex:1,fontSize:14,fontWeight:!aWon?700:400,color:!aWon?"#fff":"#555",textAlign:"right",cursor:"pointer",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} onClick={()=>{const p=players.find(x=>x.id===d.player_b);if(p)onSelectPlayer(p);}}>{pname(d.player_b)}</span>
+              <button style={{...S.delIcon,flexShrink:0}} onClick={doDelete}>×</button>
             </div>
           );
         })}
@@ -941,180 +1078,192 @@ function Log({ games, players, onReload }: { games: Game[]; players: Player[]; o
     <div style={S.page}>
       <div style={{...S.card, display:"flex", alignItems:"center", justifyContent:"space-between"}}>
         <div>
-          <div style={{fontSize:13,fontWeight:700,color:"#111"}}>스탯 재계산</div>
-          <div style={{fontSize:11,color:"#9ca3af",marginTop:2}}>경기 삭제 후 스탯이 안 맞을 때</div>
+          <div style={{fontSize:13,fontWeight:700,color:"#fff"}}>스탯 재계산</div>
+          <div style={{fontSize:12,color:"#555",marginTop:2}}>경기 삭제 후 스탯이 안 맞을 때</div>
         </div>
-        <button style={{...S.btnPrimary, opacity:recalcing?0.6:1, background:recalcDone?"#059669":"#111"}} onClick={recalcAll} disabled={recalcing}>
-          {recalcDone?"✓ 완료":recalcing?"계산 중...":"🔄 재계산"}
+        <button style={{...S.btnPrimary, opacity:recalcing?0.6:1, background:recalcDone?"#16a34a":"#FF6200"}} onClick={recalcAll} disabled={recalcing}>
+          {recalcDone?"완료":recalcing?"계산 중...":"재계산"}
         </button>
       </div>
-      <div style={S.card}>
-        <div style={S.cardHeader}>
-          <span style={S.cardTitle}>ALL GAMES</span>
-          <span style={S.cardSub}>{games.length}경기</span>
-        </div>
-        {games.length===0&&<Empty text="경기 기록이 없습니다"/>}
-        {games.map(g=>(
-          <div key={g.id} style={{...S.gameWrap,position:"relative"}}>
-            <button style={S.delBtn} onClick={()=>del(g.id)}>🗑</button>
-            <GameCard game={g} players={players}/>
+      {games.length===0&&<Empty text="경기 기록이 없습니다"/>}
+      {(()=>{
+        const grouped=games.reduce((acc,g)=>{
+          const dt=new Date(g.created_at);
+          const key=`${dt.getFullYear()}.${String(dt.getMonth()+1).padStart(2,"0")}.${String(dt.getDate()).padStart(2,"0")}`;
+          if(!acc[key])acc[key]=[];acc[key].push(g);return acc;
+        },{} as Record<string,Game[]>);
+        const keys=Object.keys(grouped).sort((a,b)=>b>a?1:-1);
+        return keys.map(date=>(
+          <div key={date} style={S.card}>
+            <div style={{fontSize:11,fontWeight:700,color:"#555",letterSpacing:1,marginBottom:10}}>{date}</div>
+            {grouped[date].map(g=>(
+              <div key={g.id} style={S.gameWrap}>
+                <GameCard game={g} players={players} onDelete={()=>del(g.id)}/>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        ));
+      })()}
     </div>
   );
 }
 
 // ── GAME CARD ─────────────────────────────────────────────────────────────────
-function GameCard({ game, players, highlightId }: { game: Game; players: Player[]; highlightId?: string }) {
+function GameCard({ game, players, highlightId, onDelete }: { game: Game; players: Player[]; highlightId?: string; onDelete?: () => void }) {
   const pname=(id:string)=>players.find(p=>p.id===id)?.name??id.slice(0,4);
-  const date=new Date(game.created_at).toLocaleDateString("ko-KR",{month:"short",day:"numeric"});
-  const scores=game.player_scores||{};
-  const hasScores=Object.keys(scores).length>0;
-  const allIds=[...(game.team_a||[]),...(game.team_b||[])];
+  const _dt=new Date(game.created_at);
+  const date=`${_dt.getMonth()+1}/${String(_dt.getDate()).padStart(2,"0")}`;
   const modeA=(game.team_a||[]).length;
   const modeB=(game.team_b||[]).length;
   return (
     <div style={S.gcWrap}>
-      <div style={S.gcMeta}>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <span style={S.gcDate}>{date}</span>
-          <span style={{fontSize:10,background:"#f1f5f9",borderRadius:10,padding:"1px 6px",color:"#6b7280",fontWeight:600}}>{modeA}vs{modeB}</span>
+      <div style={{...S.gcMeta,position:"relative",justifyContent:"center"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:13,fontWeight:600,color:"#888",letterSpacing:0.5}}>{date}</span>
+          <span style={{fontSize:13,color:"#444"}}>/</span>
+          <span style={{fontSize:13,fontWeight:600,color:"#888",letterSpacing:0.5}}>{modeA}v{modeB}</span>
         </div>
-        {game.mvp&&<span style={S.gcMvp}>🏆 MVP {pname(game.mvp)}</span>}
+        {onDelete&&<button style={{position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#333",cursor:"pointer",fontSize:15,fontWeight:700,padding:0,lineHeight:1}} onClick={onDelete}>×</button>}
       </div>
       <div style={S.gcScore}>
         <div style={{textAlign:"center",flex:1}}>
-          <div style={{...S.gcTeamLabel,color:game.winner==="A"?"#111":"#9ca3af"}}>TEAM A {game.winner==="A"?"🏆":""}</div>
-          <div style={{...S.gcBigScore,color:game.winner==="A"?"#111":"#d1d5db"}}>{game.score_a}</div>
-          <div style={S.gcNames}>{(game.team_a||[]).map(id=><span key={id} style={{fontWeight:highlightId===id?700:400,color:highlightId===id?"#111":"#9ca3af"}}>{pname(id)}</span>).reduce((a:any,b:any,i)=>[...a,<span key={i} style={{color:"#e5e7eb"}}> · </span>,b],[])}</div>
+          <div style={{...S.gcTeamLabel,color:game.winner==="A"?"#FF6200":"#555"}}>TEAM A {game.winner==="A"?"WIN":""}</div>
+          <div style={{...S.gcBigScore,color:game.winner==="A"?"#fff":"#333"}}>{game.score_a}</div>
+          <div style={S.gcNames}>{(game.team_a||[]).map(id=><span key={id} style={{fontWeight:id===game.mvp||highlightId===id?700:400,color:id===game.mvp?"#F59E0B":game.winner==="A"?"#fff":"#555"}}>{pname(id)}</span>).reduce((a:any,b:any,i)=>[...a,<span key={i} style={{color:"#2a2a2a"}}> · </span>,b],[])}</div>
         </div>
         <div style={S.gcVs}>:</div>
         <div style={{textAlign:"center",flex:1}}>
-          <div style={{...S.gcTeamLabel,color:game.winner==="B"?"#111":"#9ca3af"}}>TEAM B {game.winner==="B"?"🏆":""}</div>
-          <div style={{...S.gcBigScore,color:game.winner==="B"?"#111":"#d1d5db"}}>{game.score_b}</div>
-          <div style={S.gcNames}>{(game.team_b||[]).map(id=><span key={id} style={{fontWeight:highlightId===id?700:400,color:highlightId===id?"#111":"#9ca3af"}}>{pname(id)}</span>).reduce((a:any,b:any,i)=>[...a,<span key={i} style={{color:"#e5e7eb"}}> · </span>,b],[])}</div>
+          <div style={{...S.gcTeamLabel,color:game.winner==="B"?"#FF6200":"#555"}}>TEAM B {game.winner==="B"?"WIN":""}</div>
+          <div style={{...S.gcBigScore,color:game.winner==="B"?"#fff":"#333"}}>{game.score_b}</div>
+          <div style={S.gcNames}>{(game.team_b||[]).map(id=><span key={id} style={{fontWeight:id===game.mvp||highlightId===id?700:400,color:id===game.mvp?"#F59E0B":game.winner==="B"?"#fff":"#555"}}>{pname(id)}</span>).reduce((a:any,b:any,i)=>[...a,<span key={i} style={{color:"#2a2a2a"}}> · </span>,b],[])}</div>
         </div>
       </div>
-      {hasScores&&(
-        <div style={S.gcPts}>
-          {allIds.filter(id=>scores[id]).sort((a,b)=>(scores[b]||0)-(scores[a]||0)).map(id=>(
-            <span key={id} style={{...S.gcPtChip,fontWeight:highlightId===id?700:400}}>{pname(id)} <b>{scores[id]}pts</b></span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
 
 function GlobalStyle() {
   return <style>{`
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
     *{box-sizing:border-box;margin:0;padding:0;}
-    body{background:#f8fafc;}
+    body{background:#0d0d0d;}
     input,select,button{font-family:inherit;}
     input:focus,select:focus{outline:none;}
     @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
     button:active{opacity:0.7;}
   `}</style>;
 }
-function PosTag({pos}:{pos:string}) {
-  const c:Record<string,string>={PG:"#2563eb",SG:"#7c3aed",SF:"#059669",PF:"#d97706",C:"#dc2626"};
-  return <span style={{fontSize:9,fontWeight:700,padding:"2px 5px",borderRadius:3,background:(c[pos]||"#6b7280")+"15",color:c[pos]||"#6b7280",letterSpacing:0.5,flexShrink:0}}>{pos}</span>;
+function TierBadge({tier,label=true}:{tier:{name:string,color:string},label?:boolean}) {
+  return (
+    <span style={{display:"inline-flex",alignItems:"center",gap:5,flexShrink:0}}>
+      <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
+        <span style={{fontSize:19,fontWeight:900,color:tier.color,fontFamily:"'Bebas Neue',sans-serif",lineHeight:1}}>{tier.name}</span>
+        <span style={{display:"inline-block",width:22,height:22,background:tier.color,WebkitMaskImage:"url('/wing.png')",WebkitMaskSize:"contain",WebkitMaskRepeat:"no-repeat",WebkitMaskPosition:"center",maskImage:"url('/wing.png')",maskSize:"contain",maskRepeat:"no-repeat",maskPosition:"center"}}/>
+      </span>
+    </span>
+  );
 }
-function Empty({text}:{text:string}) {
-  return <div style={{textAlign:"center",padding:"24px 0",color:"#9ca3af",fontSize:13}}>— {text} —</div>;
+function TitleTag({title}:{title:{label:string;color:string}}) {
+  return <span style={{fontSize:11,fontWeight:600,color:title.color,fontStyle:"italic"}}>"{title.label}"</span>;
 }
 
+function PosTag({pos}:{pos:string}) {
+  return <span style={{fontSize:11,fontWeight:700,color:"#666",letterSpacing:0.3,border:"1px solid #2a2a2a",borderRadius:4,padding:"1px 5px",flexShrink:0}}>{pos}</span>;
+}
+function Empty({text}:{text:string}) {
+  return <div style={{textAlign:"center",padding:"24px 0",color:"#444",fontSize:13}}>— {text} —</div>;
+}
+
+// BG:#0d0d0d  SURFACE:#161616  BORDER:#262626  TEXT:#fff  MUTED:#555  BRAND:#FF6200
 const S:Record<string,React.CSSProperties>={
-  root:         {minHeight:"100vh",background:"#f8fafc",fontFamily:"'Inter',sans-serif",color:"#111"},
-  loadWrap:     {display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f8fafc",gap:8},
-  loadText:     {fontSize:11,fontWeight:800,letterSpacing:3,color:"#9ca3af"},
-  header:       {background:"#fff",borderBottom:"1px solid #f1f5f9",padding:"0 16px",position:"sticky",top:0,zIndex:10},
+  root:         {minHeight:"100vh",background:"#0d0d0d",fontFamily:"'Noto Sans KR',sans-serif",color:"#fff"},
+  loadWrap:     {display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0d0d0d",gap:8},
+  loadText:     {fontSize:12,fontWeight:700,letterSpacing:3,color:"#555",fontFamily:"'Noto Sans KR',sans-serif"},
+  header:       {background:"#0d0d0d",borderBottom:"1px solid #262626",padding:"0 16px",position:"sticky",top:0,zIndex:10},
   headerInner:  {display:"flex",alignItems:"center",justifyContent:"space-between",height:52},
-  logo:         {display:"flex",alignItems:"center",gap:8},
-  logoIcon:     {fontSize:20},
-  logoText:     {fontSize:17,fontWeight:900,letterSpacing:2,color:"#111"},
-  headerSub:    {fontSize:11,color:"#9ca3af",fontWeight:500},
-  backBtn:      {background:"none",border:"none",fontSize:13,fontWeight:600,color:"#6b7280",cursor:"pointer",padding:"4px 0"},
-  errorBar:     {background:"#fef2f2",borderBottom:"1px solid #fecaca",padding:"8px 16px",fontSize:12,color:"#dc2626",display:"flex",justifyContent:"space-between"},
-  errX:         {background:"none",border:"none",color:"#dc2626",cursor:"pointer"},
-  nav:          {background:"#fff",borderBottom:"1px solid #f1f5f9",padding:"0 16px"},
-  navInner:     {display:"flex"},
-  navBtn:       {padding:"12px 10px",background:"transparent",border:"none",borderBottom:"2px solid transparent",color:"#6b7280",fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s"},
-  navOn:        {color:"#111",borderBottomColor:"#111"},
-  main:         {paddingBottom:60},
-  page:         {padding:"16px 14px",display:"flex",flexDirection:"column",gap:12,maxWidth:600,margin:"0 auto"},
-  card:         {background:"#fff",borderRadius:12,border:"1px solid #f1f5f9",padding:"16px",animation:"fadeUp .25s both"},
+  logo:         {display:"flex",alignItems:"center",gap:6},
+  logoIcon:     {fontSize:18,lineHeight:1,display:"flex",alignItems:"center"},
+  logoText:     {fontSize:20,fontWeight:900,letterSpacing:3,color:"#fff",fontFamily:"'Bebas Neue',sans-serif",lineHeight:"20px",paddingTop:1},
+  headerSub:    {fontSize:12,color:"#555",fontWeight:500},
+  backBtn:      {background:"none",border:"none",fontSize:13,fontWeight:600,color:"#888",cursor:"pointer",padding:"4px 0"},
+  errorBar:     {background:"#2a1010",borderBottom:"1px solid #5a1a1a",padding:"8px 16px",fontSize:12,color:"#f87171",display:"flex",justifyContent:"space-between"},
+  errX:         {background:"none",border:"none",color:"#f87171",cursor:"pointer"},
+  nav:          {background:"#0d0d0d",borderBottom:"1px solid #262626",padding:"0 16px"},
+  navInner:     {display:"flex",justifyContent:"center"},
+  navBtn:       {padding:"12px 10px",background:"transparent",border:"none",borderBottom:"2px solid transparent",color:"#555",fontSize:13,fontWeight:700,cursor:"pointer",transition:"all .15s",fontFamily:"'Noto Sans KR',sans-serif",letterSpacing:0,lineHeight:1},
+  navOn:        {color:"#FF6200",borderBottomColor:"#FF6200"},
+  main:         {paddingBottom:"calc(60px + env(safe-area-inset-bottom))"},
+  page:         {padding:"0",display:"flex",flexDirection:"column",gap:0,maxWidth:600,margin:"0 auto"},
+  card:         {background:"#0d0d0d",borderBottom:"1px solid #262626",padding:"20px 16px",animation:"fadeUp .25s both"},
   cardHeader:   {display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:14},
-  cardTitle:    {fontSize:11,fontWeight:800,letterSpacing:2,color:"#111"},
-  cardSub:      {fontSize:11,color:"#9ca3af"},
-  summaryRow:   {background:"#fff",borderRadius:12,border:"1px solid #f1f5f9",padding:"16px",display:"flex",alignItems:"center"},
+  cardTitle:    {fontSize:12,fontWeight:800,letterSpacing:0,color:"#fff",fontFamily:"'Noto Sans KR',sans-serif"},
+  cardSub:      {fontSize:12,color:"#555"},
+  summaryRow:   {background:"#0d0d0d",borderBottom:"1px solid #262626",padding:"20px 16px",display:"flex",alignItems:"center"},
   summaryCard:  {flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2},
-  summaryNum:   {fontSize:22,fontWeight:900,color:"#111"},
-  summaryLabel: {fontSize:9,fontWeight:700,letterSpacing:1.5,color:"#9ca3af"},
-  summaryDivider:{width:1,height:32,background:"#f1f5f9",flexShrink:0},
-  rankRow:      {display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #f8fafc"},
-  rankIdx:      {fontSize:13,fontWeight:800,width:18,flexShrink:0,textAlign:"center"},
+  summaryNum:   {fontSize:28,fontWeight:900,color:"#fff",fontFamily:"'Bebas Neue',sans-serif",lineHeight:1},
+  summaryLabel: {fontSize:11,fontWeight:700,letterSpacing:0,color:"#555",fontFamily:"'Noto Sans KR',sans-serif"},
+  summaryDivider:{width:1,height:32,background:"#262626",flexShrink:0},
+  rankRow:      {display:"flex",alignItems:"center",gap:10,padding:"12px 0",borderBottom:"1px solid #1e1e1e"},
+  rankIdx:      {fontSize:16,fontWeight:900,width:20,flexShrink:0,textAlign:"center",fontFamily:"'Bebas Neue',sans-serif",lineHeight:1},
   rankInfo:     {flex:1,minWidth:0},
   rankTop:      {display:"flex",alignItems:"center",gap:5,marginBottom:5,flexWrap:"wrap"},
-  rankName:     {fontSize:14,fontWeight:700,color:"#111"},
-  rankBar:      {height:3,background:"#f1f5f9",borderRadius:2,overflow:"hidden"},
+  rankName:     {fontSize:14,fontWeight:700,color:"#fff"},
+  rankBar:      {height:3,background:"#1e1e1e",borderRadius:2,overflow:"hidden"},
   rankFill:     {height:"100%",borderRadius:2,transition:"width .5s"},
   rankStat:     {display:"flex",flexDirection:"column",alignItems:"flex-end",flexShrink:0},
-  rankRate:     {fontSize:15,fontWeight:800,color:"#111"},
-  rankRecord:   {fontSize:10,color:"#9ca3af",fontWeight:500},
-  tierTag:      {fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:3,border:"1px solid",letterSpacing:0.5},
-  profileHero:  {background:"#fff",borderRadius:12,border:"1px solid #f1f5f9",padding:16,display:"flex",alignItems:"flex-start",gap:14},
-  profileAvatar:{width:56,height:56,borderRadius:12,background:"#f1f5f9",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},
+  rankRate:     {fontSize:18,fontWeight:800,color:"#fff",fontFamily:"'Bebas Neue',sans-serif",lineHeight:1},
+  rankRecord:   {fontSize:12,color:"#555",fontWeight:500},
+  tierTag:      {fontSize:12,fontWeight:700,letterSpacing:0,color:"#fff",fontFamily:"'Noto Sans KR',sans-serif"},
+  profileHero:  {background:"#0d0d0d",borderBottom:"1px solid #262626",padding:"20px 16px",display:"flex",alignItems:"flex-start",gap:14},
+  profileAvatar:{width:56,height:56,borderRadius:12,background:"#1e1e1e",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},
   profileInfo:  {flex:1},
-  profileName:  {fontSize:22,fontWeight:900,color:"#111"},
-  statGrid:     {display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8},
-  statBox:      {background:"#fff",borderRadius:10,border:"1px solid #f1f5f9",padding:"12px 8px",display:"flex",flexDirection:"column",alignItems:"center",gap:2},
-  statBig:      {fontSize:15,fontWeight:900,color:"#111"},
-  statLabel:    {fontSize:9,fontWeight:700,letterSpacing:1,color:"#9ca3af"},
+  profileName:  {fontSize:24,fontWeight:900,color:"#fff",fontFamily:"'Noto Sans KR',sans-serif",letterSpacing:0,lineHeight:1.2},
+  statGrid:     {display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:0,borderTop:"1px solid #262626",borderBottom:"1px solid #262626"},
+  statBox:      {background:"#0d0d0d",padding:"14px 8px",display:"flex",flexDirection:"column",alignItems:"center",gap:2,borderRight:"1px solid #262626"},
+  statBig:      {fontSize:18,fontWeight:900,color:"#fff",fontFamily:"'Bebas Neue',sans-serif",lineHeight:1},
+  statLabel:    {fontSize:11,fontWeight:700,letterSpacing:0,color:"#555",fontFamily:"'Noto Sans KR',sans-serif"},
   addRow:       {display:"flex",gap:8},
-  input:        {flex:1,background:"#f8fafc",border:"1px solid #e5e7eb",borderRadius:8,padding:"9px 12px",color:"#111",fontSize:13,fontWeight:500,transition:"border-color .15s"},
-  select:       {background:"#f8fafc",border:"1px solid #e5e7eb",borderRadius:8,padding:"9px 10px",color:"#111",fontSize:13,fontWeight:500},
-  btnPrimary:   {background:"#111",border:"none",borderRadius:8,padding:"9px 16px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13,whiteSpace:"nowrap"},
-  btnGhost:     {background:"transparent",border:"1px solid #e5e7eb",borderRadius:8,padding:"8px 14px",color:"#6b7280",cursor:"pointer",fontSize:12,fontWeight:500},
-  iconBtn:      {background:"none",border:"none",cursor:"pointer",fontSize:15,padding:"4px",color:"#9ca3af"},
-  playerRow:    {display:"flex",alignItems:"center",gap:8,padding:"10px 0",borderBottom:"1px solid #f8fafc",flexWrap:"wrap"},
-  playerLeft:   {flex:1},
-  playerTop:    {display:"flex",alignItems:"center",gap:5,marginBottom:4,flexWrap:"wrap"},
-  playerName:   {fontSize:14,fontWeight:700,color:"#111"},
-  playerStats:  {display:"flex",gap:4,flexWrap:"wrap"},
-  playerActions:{display:"flex",gap:2},
-  statPill:     {fontSize:11,fontWeight:600,padding:"2px 7px",borderRadius:20,background:"#f1f5f9",color:"#6b7280"},
+  input:        {flex:1,background:"#161616",border:"1px solid #333",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,fontWeight:500,transition:"border-color .15s"},
+  select:       {background:"#161616",border:"1px solid #333",borderRadius:8,padding:"9px 32px 9px 10px",color:"#fff",fontSize:13,fontWeight:500,WebkitAppearance:"none",appearance:"none",backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23555' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",backgroundRepeat:"no-repeat",backgroundPosition:"right 10px center"},
+  btnPrimary:   {background:"#FF6200",border:"none",borderRadius:999,padding:"9px 20px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13,whiteSpace:"nowrap"},
+  btnGhost:     {background:"transparent",border:"1px solid #333",borderRadius:8,padding:"8px 14px",color:"#888",cursor:"pointer",fontSize:12,fontWeight:500},
+  iconBtn:      {background:"none",border:"none",cursor:"pointer",fontSize:13,padding:"4px 8px",color:"#555",fontWeight:600},
+  delIcon:      {background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"4px 8px",color:"#ef4444",fontWeight:700},
+  playerRow:    {display:"flex",alignItems:"center",gap:10,padding:"16px 0",borderBottom:"1px solid #1e1e1e"},
+  playerLeft:   {flex:1,minWidth:0},
+  playerTop:    {display:"flex",alignItems:"center",gap:6,marginBottom:8,flexWrap:"wrap"},
+  playerName:   {fontSize:17,fontWeight:700,color:"#fff"},
+  playerStats:  {display:"flex",gap:5,flexWrap:"wrap"},
+  playerActions:{display:"flex",gap:4,flexShrink:0},
+  statPill:     {fontSize:12,fontWeight:600,padding:"3px 9px",borderRadius:20,background:"#1e1e1e",color:"#888"},
   editRow:      {display:"flex",gap:6,alignItems:"center",flex:1,flexWrap:"wrap"},
   scoreRow:     {display:"flex",alignItems:"center",gap:16,justifyContent:"center"},
   scoreSide:    {display:"flex",flexDirection:"column",alignItems:"center",gap:6},
-  scoreLabel:   {fontSize:10,fontWeight:700,letterSpacing:1.5,color:"#9ca3af"},
-  scoreInput:   {width:88,background:"#f8fafc",border:"1px solid #e5e7eb",borderRadius:10,padding:"12px 0",color:"#111",fontSize:36,fontWeight:900,textAlign:"center"},
-  scoreVs:      {fontSize:16,color:"#d1d5db",fontWeight:700},
+  scoreLabel:   {fontSize:12,fontWeight:700,letterSpacing:1.5,color:"#555"},
+  scoreInput:   {width:72,background:"#161616",border:"1px solid #333",borderRadius:10,padding:"10px 0",color:"#fff",fontSize:42,fontWeight:900,textAlign:"center",fontFamily:"'Bebas Neue',sans-serif"},
+  scoreVs:      {fontSize:16,color:"#333",fontWeight:700},
   teamGrid:     {display:"flex",gap:10},
   teamCol:      {flex:1,minWidth:0},
-  teamHead:     {fontSize:10,fontWeight:800,letterSpacing:1,padding:"6px 0",borderBottom:"2px solid",marginBottom:6},
-  teamMember:   {display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid #f8fafc"},
+  teamHead:     {fontSize:12,fontWeight:800,letterSpacing:1,padding:"6px 0",borderBottom:"2px solid",marginBottom:6},
+  teamMember:   {display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid #1e1e1e"},
   freeList:     {paddingTop:4},
-  freeBtn:      {display:"flex",alignItems:"center",gap:5,padding:"5px 0",width:"100%",background:"transparent",border:"none",color:"#9ca3af",cursor:"pointer",borderBottom:"1px solid #f8fafc"},
-  removeBtn:    {background:"none",border:"none",color:"#d1d5db",cursor:"pointer",fontSize:12,padding:2},
-  fieldLabel:   {fontSize:10,fontWeight:700,letterSpacing:1,color:"#9ca3af",marginBottom:6},
+  freeBtn:      {display:"flex",alignItems:"center",gap:5,padding:"5px 0",width:"100%",background:"transparent",border:"none",color:"#555",cursor:"pointer",borderBottom:"1px solid #1e1e1e"},
+  removeBtn:    {background:"none",border:"none",color:"#444",cursor:"pointer",fontSize:12,padding:2},
+  fieldLabel:   {fontSize:12,fontWeight:700,letterSpacing:1,color:"#555",marginBottom:6},
   winRow:       {display:"flex",gap:8},
   winBtn:       {flex:1,padding:"10px 0",borderRadius:8,border:"1px solid",cursor:"pointer",fontWeight:700,fontSize:13,transition:"all .15s"},
-  scoresBox:    {background:"#f8fafc",borderRadius:8,padding:10},
+  scoresBox:    {background:"#161616",borderRadius:8,padding:10},
   scoreItemRow: {display:"flex",alignItems:"center",gap:8,marginBottom:6},
-  gameWrap:     {padding:"12px 0",borderBottom:"1px solid #f8fafc"},
-  delBtn:       {position:"absolute",top:12,right:0,background:"none",border:"none",color:"#e5e7eb",cursor:"pointer",fontSize:14},
+  gameWrap:     {padding:"14px 0",borderBottom:"1px solid #1e1e1e"},
+  delBtn:       {position:"absolute",top:12,right:0,background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:11,fontWeight:600},
   gcWrap:       {},
   gcMeta:       {display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10},
-  gcDate:       {fontSize:11,color:"#9ca3af",fontWeight:500},
-  gcMvp:        {fontSize:11,color:"#d97706",fontWeight:600,background:"#fef3c7",padding:"2px 8px",borderRadius:4},
+  gcDate:       {fontSize:12,color:"#555",fontWeight:500},
+  gcMvp:        {fontSize:12,color:"#FF6200",fontWeight:600,background:"rgba(255,98,0,0.12)",padding:"2px 8px",borderRadius:4},
   gcScore:      {display:"flex",alignItems:"center",gap:8,justifyContent:"space-around"},
-  gcTeamLabel:  {fontSize:10,fontWeight:700,letterSpacing:1,marginBottom:4},
-  gcBigScore:   {fontSize:38,fontWeight:900,lineHeight:1},
-  gcNames:      {fontSize:10,color:"#9ca3af",marginTop:4},
-  gcVs:         {fontSize:18,color:"#e5e7eb",fontWeight:900},
-  gcPts:        {display:"flex",flexWrap:"wrap",gap:4,marginTop:10,paddingTop:10,borderTop:"1px solid #f8fafc"},
-  gcPtChip:     {fontSize:11,background:"#f8fafc",borderRadius:4,padding:"2px 8px",color:"#6b7280"},
+  gcTeamLabel:  {fontSize:12,fontWeight:700,letterSpacing:1,marginBottom:4},
+  gcBigScore:   {fontSize:44,fontWeight:900,lineHeight:1,fontFamily:"'Bebas Neue',sans-serif"},
+  gcNames:      {fontSize:12,color:"#555",marginTop:4},
+  gcVs:         {fontSize:18,color:"#333",fontWeight:900},
+  gcPts:        {display:"flex",flexWrap:"wrap",gap:4,marginTop:10,paddingTop:10,borderTop:"1px solid #1e1e1e"},
+  gcPtChip:     {fontSize:12,background:"#161616",borderRadius:4,padding:"2px 8px",color:"#888"},
 };
