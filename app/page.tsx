@@ -509,11 +509,15 @@ function Home({ players, games, duels, onSelectPlayer }: { players: Player[]; ga
             <span style={{fontSize:11,color:"#555"}}>최근 3연승</span>
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {hotPlayers.map(p=>(
-              <button key={p.id} style={{background:"#1e1e1e",border:"1px solid #FF6200",borderRadius:8,padding:"7px 14px",color:"#FF6200",fontWeight:700,fontSize:13,cursor:"pointer",WebkitAppearance:"none"}} onClick={()=>onSelectPlayer(p)}>
-                {p.name}
-              </button>
-            ))}
+            {hotPlayers.map(p=>{
+              const streak=getStreak(p.id,games);
+              return (
+                <button key={p.id} style={{background:"#1e1e1e",border:"1px solid #FF6200",borderRadius:8,padding:"7px 14px",cursor:"pointer",WebkitAppearance:"none",display:"flex",alignItems:"center",gap:6}} onClick={()=>onSelectPlayer(p)}>
+                  <span style={{color:"#FF6200",fontWeight:700,fontSize:13}}>{p.name}</span>
+                  {streak&&<span style={{color:"#FF620099",fontSize:11,fontWeight:600}}>{streak.count}연승</span>}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
