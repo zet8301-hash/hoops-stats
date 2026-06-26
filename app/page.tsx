@@ -342,7 +342,7 @@ function ProfilePage({ player, games, duels, players, onReload }: {
         return (
           <div style={{...S.card,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div>
-              <div style={{fontSize:11,fontWeight:700,color:"#555",letterSpacing:1,marginBottom:4}}>WIN RATE TREND</div>
+              <div style={{fontSize:11,fontWeight:700,color:"#555",letterSpacing:1,marginBottom:4}}>승률 추이</div>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{fontSize:22,fontWeight:900,fontFamily:"'Bebas Neue',sans-serif",color:"#fff",lineHeight:1}}>{last}%</span>
                 <span style={{fontSize:11,fontWeight:700,color:diff>0?"#22C55E":diff<0?"#ef4444":"#555"}}>{diff>0?`+${diff}`:diff}%</span>
@@ -393,7 +393,7 @@ function ProfilePage({ player, games, duels, players, onReload }: {
         <div style={S.card}>
           <div style={S.cardHeader}>
             <div>
-              <span style={S.cardTitle}>TIER PROGRESS</span>
+              <span style={S.cardTitle}>티어 진행도</span>
               <div style={{marginTop:6}}>
                 {tier ? <TierBadge tier={tier}/> : <span style={{fontSize:12,color:"#444"}}>언랭</span>}
               </div>
@@ -416,14 +416,14 @@ function ProfilePage({ player, games, duels, players, onReload }: {
 
       {/* 최근 폼 */}
       <div style={S.card}>
-        <div style={S.cardHeader}><span style={S.cardTitle}>RECENT FORM</span></div>
+        <div style={S.cardHeader}><span style={S.cardTitle}>최근 전적</span></div>
         {form.length === 0 ? <Empty text="경기 기록 없음" /> : (
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            {form.map((r,i) => (
-              <div key={i} style={{width:36,height:36,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:r==="W"?"#FF6200":"#161616",border:r==="W"?"none":"1px solid #2a2a2a",fontWeight:800,fontSize:13,color:r==="W"?"#fff":"#444"}}>{r==="W"?"승":"패"}</div>
-            ))}
             {[...Array(Math.max(0,5-form.length))].map((_,i)=>(
               <div key={`e${i}`} style={{width:36,height:36,borderRadius:8,background:"#161616",border:"1px dashed #2a2a2a"}} />
+            ))}
+            {[...form].reverse().map((r,i) => (
+              <div key={i} style={{width:36,height:36,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:r==="W"?"#FF6200":"#161616",border:r==="W"?"none":"1px solid #2a2a2a",fontWeight:800,fontSize:13,color:r==="W"?"#fff":"#444"}}>{r==="W"?"승":"패"}</div>
             ))}
           </div>
         )}
@@ -455,7 +455,7 @@ function ProfilePage({ player, games, duels, players, onReload }: {
 
       {/* 최근 경기 */}
       <div style={S.card}>
-        <div style={S.cardHeader}><span style={S.cardTitle}>GAMES</span></div>
+        <div style={S.cardHeader}><span style={S.cardTitle}>경기 기록</span></div>
         {myGames.length===0 && <Empty text="경기 기록 없음" />}
         {myGames.map(g=>(
           <div key={g.id} style={S.gameWrap}>
@@ -535,7 +535,7 @@ function Home({ players, games, duels, onSelectPlayer, onGoToLog }: { players: P
 
       <div style={S.card}>
         <div style={S.cardHeader}>
-          <span style={S.cardTitle}>RANKING</span>
+          <span style={S.cardTitle}>순위</span>
           <span style={S.cardSub}>승률 기준</span>
         </div>
         {sorted.length===0&&<Empty text="선수를 추가하세요"/>}
@@ -567,7 +567,7 @@ function Home({ players, games, duels, onSelectPlayer, onGoToLog }: { players: P
       {duelSorted.length>0&&(
         <div style={S.card}>
           <div style={S.cardHeader}>
-            <span style={S.cardTitle}>1vs1 RANKING</span>
+            <span style={S.cardTitle}>1vs1 순위</span>
             <span style={S.cardSub}>승률 기준</span>
           </div>
           {duelSorted.map((p,i)=>{
@@ -593,7 +593,7 @@ function Home({ players, games, duels, onSelectPlayer, onGoToLog }: { players: P
 
       <div style={S.card}>
         <div style={S.cardHeader}>
-          <span style={S.cardTitle}>MVP RANKING</span>
+          <span style={S.cardTitle}>MVP 순위</span>
           <span style={S.cardSub}>누적</span>
         </div>
         {mvpSorted.filter(p=>p.mvp>0).length===0&&<Empty text="MVP 기록 없음"/>}
@@ -617,7 +617,7 @@ function Home({ players, games, duels, onSelectPlayer, onGoToLog }: { players: P
 
       {lastGame&&(
         <div style={S.card}>
-          <div style={S.cardHeader}><span style={S.cardTitle}>LAST GAME</span></div>
+          <div style={S.cardHeader}><span style={S.cardTitle}>최근 경기</span></div>
           <GameCard game={lastGame} players={players}/>
         </div>
       )}
@@ -688,7 +688,7 @@ function Players({ players, games, onReload, onSelectPlayer }: { players: Player
   return (
     <div style={S.page}>
       <div style={S.card}>
-        <div style={S.cardHeader}><span style={S.cardTitle}>ADD PLAYER</span></div>
+        <div style={S.cardHeader}><span style={S.cardTitle}>선수 추가</span></div>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           <div style={{display:"flex",gap:8}}>
             <input style={S.input} placeholder="이름 입력" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()}/>
@@ -701,7 +701,7 @@ function Players({ players, games, onReload, onSelectPlayer }: { players: Player
       </div>
       <div style={S.card}>
         <div style={S.cardHeader}>
-          <span style={S.cardTitle}>PLAYERS</span>
+          <span style={S.cardTitle}>선수 목록</span>
           <span style={S.cardSub}>{players.length}명</span>
         </div>
         {players.length===0&&<Empty text="선수가 없습니다"/>}
@@ -832,7 +832,7 @@ function RecordGame({ players, onReload }: { players: Player[]; onReload: () => 
     <div style={S.page}>
       <div style={S.card}>
         <div style={S.cardHeader}>
-          <span style={S.cardTitle}>SCORE</span>
+          <span style={S.cardTitle}>점수</span>
           {modeLabel()&&<span style={{fontSize:13,fontWeight:800,color:"#111",background:"#f1f5f9",padding:"3px 10px",borderRadius:20}}>{modeLabel()}</span>}
         </div>
         <div style={{display:"flex",justifyContent:"center",gap:16,marginBottom:6}}>
@@ -915,7 +915,7 @@ function RecordGame({ players, onReload }: { players: Player[]; onReload: () => 
       </div>
 
       <div style={S.card}>
-        <div style={S.cardHeader}><span style={S.cardTitle}>RESULT</span></div>
+        <div style={S.cardHeader}><span style={S.cardTitle}>결과</span></div>
         {scoreA&&scoreB&&<div style={{marginBottom:14,padding:"8px 12px",background:"rgba(255,98,0,0.08)",borderRadius:8,fontSize:12,color:"#FF6200",fontWeight:700}}>
           TEAM {winner} WIN ({Number(scoreA) > Number(scoreB) ? `${scoreA} : ${scoreB}` : `${scoreB} : ${scoreA}`})
         </div>}
