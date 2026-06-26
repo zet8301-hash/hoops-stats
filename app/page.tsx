@@ -503,14 +503,14 @@ function Home({ players, games, duels, onSelectPlayer }: { players: Player[]; ga
       </div>
 
       {hotPlayers.length>0&&(
-        <div style={{...S.card,background:"rgba(255,98,0,0.07)",borderBottom:"1px solid rgba(255,98,0,0.18)"}}>
+        <div style={{...S.card,borderLeft:"3px solid #FF6200"}}>
           <div style={S.cardHeader}>
             <span style={{...S.cardTitle,color:"#FF6200"}}>요즘 핫함</span>
-            <span style={{fontSize:12,color:"#FF620077"}}>최근 3연승</span>
+            <span style={{fontSize:11,color:"#555"}}>최근 3연승</span>
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {hotPlayers.map(p=>(
-              <button key={p.id} style={{background:"rgba(255,98,0,0.15)",border:"1px solid rgba(255,98,0,0.3)",borderRadius:20,padding:"6px 14px",color:"#FF6200",fontWeight:700,fontSize:13,cursor:"pointer"}} onClick={()=>onSelectPlayer(p)}>
+              <button key={p.id} style={{background:"#1e1e1e",border:"1px solid #FF6200",borderRadius:8,padding:"7px 14px",color:"#FF6200",fontWeight:700,fontSize:13,cursor:"pointer",WebkitAppearance:"none"}} onClick={()=>onSelectPlayer(p)}>
                 {p.name}
               </button>
             ))}
@@ -671,12 +671,14 @@ function Players({ players, games, onReload, onSelectPlayer }: { players: Player
     <div style={S.page}>
       <div style={S.card}>
         <div style={S.cardHeader}><span style={S.cardTitle}>ADD PLAYER</span></div>
-        <div style={S.addRow}>
-          <input style={S.input} placeholder="이름 입력" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()}/>
-          <select style={S.select} value={pos} onChange={e=>setPos(e.target.value)}>
-            {POSITIONS.map(p=><option key={p}>{p}</option>)}
-          </select>
-          <button style={{...S.btnPrimary,opacity:saving?.5:1}} onClick={add} disabled={saving}>{saving?"...":"추가"}</button>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{display:"flex",gap:8}}>
+            <input style={S.input} placeholder="이름 입력" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()}/>
+            <select style={S.select} value={pos} onChange={e=>setPos(e.target.value)}>
+              {POSITIONS.map(p=><option key={p}>{p}</option>)}
+            </select>
+          </div>
+          <button style={{...S.btnPrimary,opacity:saving?.5:1,width:"100%"}} onClick={add} disabled={saving}>{saving?"...":"추가"}</button>
         </div>
       </div>
       <div style={S.card}>
@@ -1189,7 +1191,7 @@ const S:Record<string,React.CSSProperties>={
   errX:         {background:"none",border:"none",color:"#f87171",cursor:"pointer"},
   nav:          {background:"#0d0d0d",borderBottom:"1px solid #262626",padding:"0 16px"},
   navInner:     {display:"flex",justifyContent:"center"},
-  navBtn:       {padding:"12px 10px",background:"transparent",border:"none",borderBottom:"2px solid transparent",color:"#555",fontSize:13,fontWeight:700,cursor:"pointer",transition:"all .15s",fontFamily:"'Noto Sans KR',sans-serif",letterSpacing:0,lineHeight:1},
+  navBtn:       {padding:"12px 10px",background:"none",border:"none",borderBottom:"2px solid transparent",color:"#555",fontSize:13,fontWeight:700,cursor:"pointer",transition:"all .15s",fontFamily:"'Noto Sans KR',sans-serif",letterSpacing:0,lineHeight:1,WebkitAppearance:"none",WebkitTapHighlightColor:"transparent"},
   navOn:        {color:"#FF6200",borderBottomColor:"#FF6200"},
   main:         {paddingBottom:"calc(60px + env(safe-area-inset-bottom))"},
   page:         {padding:"0",display:"flex",flexDirection:"column",gap:0,maxWidth:600,margin:"0 auto"},
@@ -1221,7 +1223,7 @@ const S:Record<string,React.CSSProperties>={
   statBox:      {background:"#0d0d0d",padding:"14px 8px",display:"flex",flexDirection:"column",alignItems:"center",gap:2,borderRight:"1px solid #262626"},
   statBig:      {fontSize:18,fontWeight:900,color:"#fff",fontFamily:"'Bebas Neue',sans-serif",lineHeight:1},
   statLabel:    {fontSize:11,fontWeight:700,letterSpacing:0,color:"#555",fontFamily:"'Noto Sans KR',sans-serif"},
-  addRow:       {display:"flex",gap:8},
+  addRow:       {display:"flex",gap:8,flexWrap:"wrap"},
   input:        {flex:1,background:"#161616",border:"1px solid #333",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,fontWeight:500,transition:"border-color .15s"},
   select:       {background:"#161616",border:"1px solid #333",borderRadius:8,padding:"9px 32px 9px 10px",color:"#fff",fontSize:13,fontWeight:500,WebkitAppearance:"none",appearance:"none",backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23555' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",backgroundRepeat:"no-repeat",backgroundPosition:"right 10px center"},
   btnPrimary:   {background:"#FF6200",border:"none",borderRadius:999,padding:"9px 20px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13,whiteSpace:"nowrap"},
