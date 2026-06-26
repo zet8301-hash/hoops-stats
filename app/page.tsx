@@ -724,7 +724,7 @@ function Players({ players, games, onReload, onSelectPlayer }: { players: Player
                   </div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-                  {tier&&<TierBadge tier={tier} label={false}/>}
+                  {tier&&<TierBadge tier={tier}/>}
                   <span style={{fontSize:22,fontWeight:900,color:"#fff",fontFamily:"'Bebas Neue',sans-serif",lineHeight:1}}>{p.win_rate||0}%</span>
                   <button style={{background:"none",border:"none",color:"#333",fontSize:18,cursor:"pointer",padding:"0 4px",lineHeight:1,letterSpacing:1}} onClick={e=>{e.stopPropagation();setEditing(editing?.id===p.id?null:{id:p.id,name:p.name,position:p.position})}}>···</button>
                 </div>
@@ -1137,16 +1137,12 @@ function Log({ games, players, onReload }: { games: Game[]; players: Player[]; o
 // ── GAME CARD ─────────────────────────────────────────────────────────────────
 function GameCard({ game, players, highlightId, onDelete }: { game: Game; players: Player[]; highlightId?: string; onDelete?: () => void }) {
   const pname=(id:string)=>players.find(p=>p.id===id)?.name??id.slice(0,4);
-  const _dt=new Date(game.created_at);
-  const date=`${_dt.getMonth()+1}/${String(_dt.getDate()).padStart(2,"0")}`;
   const modeA=(game.team_a||[]).length;
   const modeB=(game.team_b||[]).length;
   return (
     <div style={S.gcWrap}>
       <div style={{...S.gcMeta,position:"relative",justifyContent:"center"}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:13,fontWeight:600,color:"#888",letterSpacing:0.5}}>{date}</span>
-          <span style={{fontSize:13,color:"#444"}}>/</span>
           <span style={{fontSize:13,fontWeight:600,color:"#888",letterSpacing:0.5}}>{modeA}v{modeB}</span>
         </div>
         {onDelete&&<button style={{position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#333",cursor:"pointer",fontSize:15,fontWeight:700,padding:0,lineHeight:1}} onClick={onDelete}>×</button>}
@@ -1178,7 +1174,7 @@ function GlobalStyle() {
     button:active{opacity:0.7;}
   `}</style>;
 }
-function TierBadge({tier,label=true}:{tier:{name:string,color:string},label?:boolean}) {
+function TierBadge({tier}:{tier:{name:string,color:string}}) {
   return (
     <span style={{display:"inline-flex",alignItems:"center",gap:5,flexShrink:0}}>
       <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
