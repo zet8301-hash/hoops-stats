@@ -1135,7 +1135,63 @@ function Log({ games, players, onReload }: { games: Game[]; players: Player[]; o
 }
 
 // ── GAME CARD ─────────────────────────────────────────────────────────────────
+async function shareGame(game: Game, players: Player[]) {
+  const h2c = (await import("html2canvas")).default;
+  const pname = (id: string) => players.find(p => p.id === id)?.name ?? "?";
+  const dt = new Date(game.created_at);
+  const dateStr = `${dt.getFullYear()}.${String(dt.getMonth()+1).padStart(2,"0")}.${String(dt.getDate()).padStart(2,"0")}`;
+  const aWon = game.winner === "A";
+  const mvpName = game.mvp ? pname(game.mvp) : null;
+  const teamA = (game.team_a||[]).map(id=>pname(id)).join(" · ");
+  const teamB = (game.team_b||[]).map(id=>pname(id)).join(" · ");
+
+  const el = document.createElement("div");
+  el.style.cssText = "position:fixed;left:-9999px;top:0;width:390px;height:693px;background:#0d0d0d;font-family:'Noto Sans KR',sans-serif;color:#fff;display:flex;flex-direction:column;padding:48px 32px;box-sizing:border-box;";
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:auto;">
+      <div style="font-size:28px;font-weight:900;letter-spacing:4px;color:#fff;font-family:'Bebas Neue',sans-serif;">HOOPS</div>
+      <div style="font-size:12px;color:#444;font-weight:600;">${dateStr}</div>
+    </div>
+    <div style="text-align:center;margin:auto 0;">
+      <div style="display:flex;align-items:center;justify-content:center;gap:24px;margin-bottom:28px;">
+        <div style="text-align:center;flex:1;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:${aWon?"#FF6200":"#2a2a2a"};margin-bottom:8px;">TEAM A${aWon?" WIN":""}</div>
+          <div style="font-size:88px;font-weight:900;color:${aWon?"#fff":"#2a2a2a"};font-family:'Bebas Neue',sans-serif;line-height:1;">${game.score_a}</div>
+          <div style="font-size:12px;color:${aWon?"#888":"#2a2a2a"};margin-top:12px;line-height:1.8;">${teamA}</div>
+        </div>
+        <div style="font-size:28px;color:#222;font-weight:900;font-family:'Bebas Neue',sans-serif;">:</div>
+        <div style="text-align:center;flex:1;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:${!aWon?"#FF6200":"#2a2a2a"};margin-bottom:8px;">TEAM B${!aWon?" WIN":""}</div>
+          <div style="font-size:88px;font-weight:900;color:${!aWon?"#fff":"#2a2a2a"};font-family:'Bebas Neue',sans-serif;line-height:1;">${game.score_b}</div>
+          <div style="font-size:12px;color:${!aWon?"#888":"#2a2a2a"};margin-top:12px;line-height:1.8;">${teamB}</div>
+        </div>
+      </div>
+      ${mvpName ? `<div style="display:inline-flex;align-items:center;gap:8px;border:1px solid #F59E0B44;border-radius:8px;padding:10px 20px;"><span style="font-size:10px;font-weight:700;color:#F59E0B;letter-spacing:1px;">MVP</span><span style="font-size:16px;font-weight:700;color:#F59E0B;">${mvpName}</span></div>` : ""}
+    </div>
+    <div style="display:flex;justify-content:center;margin-top:auto;">
+      <div style="font-size:10px;color:#2a2a2a;letter-spacing:1px;">hoops-stats-five.vercel.app</div>
+    </div>
+  `;
+  document.body.appendChild(el);
+  try {
+    const canvas = await h2c(el, { backgroundColor:"#0d0d0d", scale:2, useCORS:true, logging:false });
+    await new Promise<void>(resolve => canvas.toBlob(async blob => {
+      if (!blob) return resolve();
+      const file = new File([blob], "hoops-story.png", { type:"image/png" });
+      if (navigator.canShare?.({ files:[file] })) {
+        await navigator.share({ files:[file], title:"HOOPS" });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a"); a.href=url; a.download="hoops-story.png"; a.click();
+        URL.revokeObjectURL(url);
+      }
+      resolve();
+    }, "image/png"));
+  } finally { document.body.removeChild(el); }
+}
+
 function GameCard({ game, players, highlightId, onDelete }: { game: Game; players: Player[]; highlightId?: string; onDelete?: () => void }) {
+  const [sharing, setSharing] = useState(false);
   const pname=(id:string)=>players.find(p=>p.id===id)?.name??id.slice(0,4);
   const modeA=(game.team_a||[]).length;
   const modeB=(game.team_b||[]).length;
@@ -1145,7 +1201,10 @@ function GameCard({ game, players, highlightId, onDelete }: { game: Game; player
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:13,fontWeight:600,color:"#888",letterSpacing:0.5}}>{modeA}v{modeB}</span>
         </div>
-        {onDelete&&<button style={{position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#333",cursor:"pointer",fontSize:15,fontWeight:700,padding:0,lineHeight:1}} onClick={onDelete}>×</button>}
+        <div style={{position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",display:"flex",alignItems:"center",gap:8}}>
+          <button style={{background:"none",border:"none",color:sharing?"#FF6200":"#333",cursor:"pointer",fontSize:13,fontWeight:700,padding:0,lineHeight:1}} onClick={async()=>{setSharing(true);try{await shareGame(game,players);}finally{setSharing(false);}}}>{sharing?"...":"공유"}</button>
+          {onDelete&&<button style={{background:"none",border:"none",color:"#333",cursor:"pointer",fontSize:15,fontWeight:700,padding:0,lineHeight:1}} onClick={onDelete}>×</button>}
+        </div>
       </div>
       <div style={S.gcScore}>
         <div style={{textAlign:"center",flex:1}}>
