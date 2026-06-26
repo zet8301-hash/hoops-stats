@@ -1201,11 +1201,10 @@ function GameCard({ game, players, highlightId, onDelete }: { game: Game; player
       <div style={{...S.gcMeta,position:"relative",justifyContent:"center"}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:13,fontWeight:600,color:"#888",letterSpacing:0.5}}>{modeA}v{modeB}</span>
+          <span style={{fontSize:13,color:"#333"}}>·</span>
+          <span style={{fontSize:13,fontWeight:700,color:"#555"}}>{game.score_a} : {game.score_b}</span>
         </div>
-        <div style={{position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",display:"flex",alignItems:"center",gap:8}}>
-          <button style={{background:"none",border:"none",color:sharing?"#FF6200":"#333",cursor:"pointer",fontSize:13,fontWeight:700,padding:0,lineHeight:1}} onClick={async()=>{setSharing(true);try{await shareGame(game,players);}finally{setSharing(false);}}}>{sharing?"...":"공유"}</button>
-          {onDelete&&<button style={{background:"none",border:"none",color:"#333",cursor:"pointer",fontSize:15,fontWeight:700,padding:0,lineHeight:1}} onClick={onDelete}>×</button>}
-        </div>
+        {onDelete&&<button style={{position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#333",cursor:"pointer",fontSize:15,fontWeight:700,padding:0,lineHeight:1}} onClick={onDelete}>×</button>}
       </div>
       <div style={S.gcScore}>
         <div style={{textAlign:"center",flex:1}}>
@@ -1219,6 +1218,9 @@ function GameCard({ game, players, highlightId, onDelete }: { game: Game; player
           <div style={{...S.gcBigScore,color:game.winner==="B"?"#fff":"#333"}}>{game.score_b}</div>
           <div style={S.gcNames}>{(game.team_b||[]).map(id=><span key={id} style={{fontWeight:id===game.mvp||highlightId===id?700:400,color:id===game.mvp?"#F59E0B":game.winner==="B"?"#fff":"#555"}}>{pname(id)}</span>).reduce((a:any,b:any,i)=>[...a,<span key={i} style={{color:"#2a2a2a"}}> · </span>,b],[])}</div>
         </div>
+      </div>
+      <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
+        <button style={{background:"none",border:"none",color:sharing?"#FF6200":"#444",cursor:"pointer",fontSize:12,fontWeight:600,padding:0,lineHeight:1}} onClick={async()=>{setSharing(true);try{await shareGame(game,players);}finally{setSharing(false);}}}>{sharing?"생성 중...":"스토리 공유"}</button>
       </div>
     </div>
   );
