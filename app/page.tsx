@@ -1149,7 +1149,10 @@ async function shareGame(game: Game, players: Player[]) {
   el.style.cssText = "position:fixed;left:-9999px;top:0;width:390px;height:693px;background:#0d0d0d;font-family:'Noto Sans KR',sans-serif;color:#fff;display:flex;flex-direction:column;padding:48px 32px;box-sizing:border-box;";
   el.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:auto;">
-      <div style="font-size:28px;font-weight:900;letter-spacing:4px;color:#fff;font-family:'Bebas Neue',sans-serif;">HOOPS</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:22px;line-height:1;">🏀</span>
+        <div style="font-size:28px;font-weight:900;letter-spacing:4px;color:#fff;font-family:'Bebas Neue',sans-serif;">HOOPS</div>
+      </div>
       <div style="font-size:12px;color:#444;font-weight:600;">${dateStr}</div>
     </div>
     <div style="text-align:center;margin:auto 0;">
@@ -1166,11 +1169,9 @@ async function shareGame(game: Game, players: Player[]) {
           <div style="font-size:12px;color:${!aWon?"#888":"#2a2a2a"};margin-top:12px;line-height:1.8;">${teamB}</div>
         </div>
       </div>
-      ${mvpName ? `<div style="display:inline-flex;align-items:center;gap:8px;border:1px solid #F59E0B44;border-radius:8px;padding:10px 20px;"><span style="font-size:10px;font-weight:700;color:#F59E0B;letter-spacing:1px;">MVP</span><span style="font-size:16px;font-weight:700;color:#F59E0B;">${mvpName}</span></div>` : ""}
+      ${mvpName ? `<div style="display:inline-flex;align-items:center;gap:8px;"><img src="/crown.png" width="18" height="18" style="object-fit:contain;"/><span style="font-size:16px;font-weight:700;color:#F59E0B;">${mvpName}</span></div>` : ""}
     </div>
-    <div style="display:flex;justify-content:center;margin-top:auto;">
-      <div style="font-size:10px;color:#2a2a2a;letter-spacing:1px;">hoops-stats-five.vercel.app</div>
-    </div>
+    <div style="height:32px;"></div>
   `;
   document.body.appendChild(el);
   try {
