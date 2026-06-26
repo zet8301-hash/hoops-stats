@@ -671,14 +671,12 @@ function Players({ players, games, onReload, onSelectPlayer }: { players: Player
     <div style={S.page}>
       <div style={S.card}>
         <div style={S.cardHeader}><span style={S.cardTitle}>ADD PLAYER</span></div>
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          <div style={{display:"flex",gap:8}}>
-            <input style={S.input} placeholder="이름 입력" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()}/>
-            <select style={S.select} value={pos} onChange={e=>setPos(e.target.value)}>
-              {POSITIONS.map(p=><option key={p}>{p}</option>)}
-            </select>
-          </div>
-          <button style={{...S.btnPrimary,opacity:saving?.5:1,width:"100%"}} onClick={add} disabled={saving}>{saving?"...":"추가"}</button>
+        <div style={{display:"flex",gap:8}}>
+          <input style={{...S.input,flex:"0 1 120px"}} placeholder="이름" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()}/>
+          <select style={S.select} value={pos} onChange={e=>setPos(e.target.value)}>
+            {POSITIONS.map(p=><option key={p}>{p}</option>)}
+          </select>
+          <button style={{...S.btnPrimary,opacity:saving?.5:1,flexShrink:0}} onClick={add} disabled={saving}>{saving?"...":"추가"}</button>
         </div>
       </div>
       <div style={S.card}>
